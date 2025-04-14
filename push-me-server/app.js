@@ -15,6 +15,8 @@ const io = new Server(server, {
 app.use(cors());
 const gridSize = 25;
 
+// Define available skins
+const availableSkins = ['😭', '😫', '😳', '😨'];
 const players = {};
 let fires = [{ x: Math.floor(Math.random() * gridSize), y: Math.floor(Math.random() * gridSize) }];
 
@@ -51,6 +53,22 @@ const spreadFire = () => {
     return newFires;
 };
 
+// Helper function: bounce a position back inside the grid (for normal movement).
+function bouncePosition(position, gridSize) {
+    let { x, y } = position;
+    if (x < 0) {
+        x = 1;
+    } else if (x >= gridSize) {
+        x = gridSize - 2;
+    }
+    if (y < 0) {
+        y = 1;
+    } else if (y >= gridSize) {
+        y = gridSize - 2;
+    }
+    return { x, y };
+}
+
 function movePlayer(socket, move) {
     let newPlayerPosition = { ...players[socket.id].position };
 
@@ -76,8 +94,8 @@ function movePlayer(socket, move) {
         }
     }
 
-    newPlayerPosition.x = Math.max(0, Math.min(gridSize - 1, newPlayerPosition.x));
-    newPlayerPosition.y = Math.max(0, Math.min(gridSize - 1, newPlayerPosition.y));
+    // Bounce for normal movement.
+    newPlayerPosition = bouncePosition(newPlayerPosition, gridSize);
 
     if (fires.some(fire => fire.x === newPlayerPosition.x && fire.y === newPlayerPosition.y)) {
         socket.emit('gameOver', { socketId: socket.id });
@@ -132,7 +150,11 @@ io.on('connection', (socket) => {
         socket.disconnect(true);
         return;
     }
-    players[socket.id] = { position: spawnLocation };
+
+    // Assign a skin from availableSkins that is not already used.
+    const usedSkins = Object.values(players).map(p => p.skin);
+    const skin = availableSkins.find(s => !usedSkins.includes(s)) || availableSkins[0];
+    players[socket.id] = { position: spawnLocation, skin };
 
     updateFireInterval();
     socket.emit('initializeGame', { gridSize });
@@ -143,7 +165,6 @@ io.on('connection', (socket) => {
         io.emit('updateState', { players, fires });
     });
 
-    // Accept punch direction from the client
     socket.on('playerPunch', (punchDir) => {
         const punchingPlayer = players[socket.id];
         let dx = 0, dy = 0;
@@ -169,44 +190,71 @@ io.on('connection', (socket) => {
             }
         }
 
-        const punchX = punchingPlayer.position.x + dx;
-        const punchY = punchingPlayer.position.y + dy;
+        // Determine the target cell (1 cell ahead)
+        const targetX = punchingPlayer.position.x + dx;
+        const targetY = punchingPlayer.position.y + dy;
 
-        const punchedPlayerId = Object.keys(players).find(pid => {
-            const p = players[pid];
-            return p.position.x === punchX && p.position.y === punchY;
-        });
+        // Case 1: Target cell is outside the grid (i.e. punching the border wall)
+        if (targetX < 0 || targetX >= gridSize || targetY < 0 || targetY >= gridSize) {
+            // Penalize: bounce the punching player back 3 cells in opposite direction.
+            let bounceX = punchingPlayer.position.x - dx * 3;
+            let bounceY = punchingPlayer.position.y - dy * 3;
+            // Clamp the bounce position
+            bounceX = Math.max(0, Math.min(gridSize - 1, bounceX));
+            bounceY = Math.max(0, Math.min(gridSize - 1, bounceY));
+            if (fires.some(f => f.x === bounceX && f.y === bounceY)) {
+                socket.emit('gameOver', { socketId: socket.id });
+                delete players[socket.id];
+            } else {
+                punchingPlayer.position.x = bounceX;
+                punchingPlayer.position.y = bounceY;
+            }
+        } else {
+            // The target cell is within the grid.
+            const punchedPlayerId = Object.keys(players).find(pid => {
+                const p = players[pid];
+                return p.position.x === targetX && p.position.y === targetY;
+            });
 
-        if (punchedPlayerId) {
-            const punchedPlayer = players[punchedPlayerId];
-            let newPunchedPosX = punchedPlayer.position.x;
-            let newPunchedPosY = punchedPlayer.position.y;
+            if (punchedPlayerId) {
+                // Case 2: Enemy found at target.
+                const punchedPlayer = players[punchedPlayerId];
+                // Proposed final position: move 3 cells forward.
+                const proposedX = punchedPlayer.position.x + dx * 3;
+                const proposedY = punchedPlayer.position.y + dy * 3;
 
-            for (let i = 0; i < 3; i++) {
-                newPunchedPosX += dx;
-                newPunchedPosY += dy;
-                const isValidPosition =
-                    newPunchedPosX >= 0 && newPunchedPosX < gridSize &&
-                    newPunchedPosY >= 0 && newPunchedPosY < gridSize &&
-                    !fires.some(f => f.x === newPunchedPosX && f.y === newPunchedPosY);
-
-                if (isValidPosition) {
-                    punchedPlayer.position.x = newPunchedPosX;
-                    punchedPlayer.position.y = newPunchedPosY;
+                if (
+                    proposedX >= 0 &&
+                    proposedX < gridSize &&
+                    proposedY >= 0 &&
+                    proposedY < gridSize
+                ) {
+                    if (fires.some(f => f.x === proposedX && f.y === proposedY)) {
+                        io.to(punchedPlayerId).emit('gameOver', { socketId: punchedPlayerId });
+                        delete players[punchedPlayerId];
+                    } else {
+                        punchedPlayer.position.x = proposedX;
+                        punchedPlayer.position.y = proposedY;
+                    }
                 } else {
-                    io.to(punchedPlayerId).emit('gameOver', { socketId: punchedPlayerId });
-                    delete players[punchedPlayerId];
-                    break;
+                    // Proposed enemy position is out-of-bounds (enemy pushed into border).
+                    // Bounce enemy back 3 cells in opposite direction.
+                    let bounceX = punchedPlayer.position.x - dx * 3;
+                    let bounceY = punchedPlayer.position.y - dy * 3;
+                    bounceX = Math.max(0, Math.min(gridSize - 1, bounceX));
+                    bounceY = Math.max(0, Math.min(gridSize - 1, bounceY));
+                    if (fires.some(f => f.x === bounceX && f.y === bounceY)) {
+                        io.to(punchedPlayerId).emit('gameOver', { socketId: punchedPlayerId });
+                        delete players[punchedPlayerId];
+                    } else {
+                        punchedPlayer.position.x = bounceX;
+                        punchedPlayer.position.y = bounceY;
+                    }
                 }
             }
         }
         io.emit('updateState', { players, fires });
     });
-
-    const resetGrid = () => {
-        console.log("Grid reset..");
-        fires = [{ x: Math.floor(Math.random() * gridSize), y: Math.floor(Math.random() * gridSize) }];
-    };
 
     socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.id}`);
@@ -222,3 +270,8 @@ io.on('connection', (socket) => {
 server.listen(3000, () => {
     console.log('Server is running on port 3000');
 });
+
+function resetGrid() {
+    console.log("Grid reset..");
+    fires = [{ x: Math.floor(Math.random() * gridSize), y: Math.floor(Math.random() * gridSize) }];
+}

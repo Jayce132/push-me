@@ -2,11 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 
 export const Player = ({ position, onMove, onPunch, cellSize, isCurrentPlayer, skin }) => {
     const keysPressed = useRef({});
-    // lastDirection holds the combined movement vector; default: up ({ dx: 0, dy: -1 })
     const [lastDirection, setLastDirection] = useState({ dx: 0, dy: -1 });
     const [isPunching, setIsPunching] = useState(false);
 
-    // Compute the player's pixel coordinates from its grid position.
     const pixelTop = position.x * cellSize;
     const pixelLeft = position.y * cellSize;
 
@@ -21,7 +19,6 @@ export const Player = ({ position, onMove, onPunch, cellSize, isCurrentPlayer, s
                 setTimeout(() => setIsPunching(false), 100);
                 return;
             }
-            // Record movement keys for polling
             keysPressed.current[e.key] = true;
         };
 
