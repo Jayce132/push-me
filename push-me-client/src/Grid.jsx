@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Player } from './Player.jsx';
 import { Ghost } from './Ghost';
 import { Fire } from './Fire';
+import { PlayerList } from './PlayerList';
 import { io } from 'socket.io-client';
 
 const Cell = ({ x, y, cellSize }) => (
@@ -9,8 +10,8 @@ const Cell = ({ x, y, cellSize }) => (
         style={{
             gridRowStart: x + 1,
             gridColumnStart: y + 1,
-            width: '100%',
-            height: '100%',
+            width: `${cellSize}px`,
+            height: `${cellSize}px`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -26,13 +27,14 @@ export const Grid = () => {
         players: {},
         fires: [],
     });
-
     const [socket, setSocket] = useState(null);
-    const [gridSize, setGridSize] = useState(20);  // default value, it will be updated upon server message
+    const [gridSize, setGridSize] = useState(20);
+    const cellSize = 32;
+    const gridWidth = gridSize * cellSize;
+    const gridHeight = gridSize * cellSize;
 
-    const [punchPosition, setPunchPosition] = useState(null);
-
-    const cellSize = 32; // Size of each grid cell in pixels
+    // Define skins for up to 4 players.
+    const playerSkins = ['😭', '😫', '😳', '😨'];
 
     useEffect(() => {
         const socket = io('http://localhost:3000');
@@ -63,31 +65,13 @@ export const Grid = () => {
         };
     }, []);
 
-
-    const movePlayer = (direction) => {
-        socket.emit('playerMove', { direction });
+    const movePlayer = (move) => {
+        socket.emit('playerMove', move);
     };
 
-    const handlePlayerPunch = () => {
-        socket.emit('playerPunch');
-
-        let dx = 0, dy = 0;
-        const currentPlayer = gameState.players[socket.id];
-        switch (currentPlayer.lastDirection) {  // Assuming you're tracking lastDirection on server
-            case 'up': dx = -1; break;
-            case 'down': dx = 1; break;
-            case 'left': dy = -1; break;
-            case 'right': dy = 1; break;
-            default: break;
-        }
-
-        const punchX = currentPlayer.position.x + dx;
-        const punchY = currentPlayer.position.y + dy;
-
-        setPunchPosition({ x: punchX, y: punchY });
-        setTimeout(() => setPunchPosition(null), 500);
+    const handlePlayerPunch = (punchDir) => {
+        socket.emit('playerPunch', punchDir);
     };
-
 
     const renderCells = () => {
         const cells = [];
@@ -99,59 +83,78 @@ export const Grid = () => {
         return cells;
     };
 
+    // Use sorted keys to assign skins in order.
+    const sortedPlayerIds = Object.keys(gameState.players).sort();
+
     return (
         <div
             style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${gridSize}, ${cellSize}px)`,
-                gridTemplateRows: `repeat(${gridSize}, ${cellSize}px)`,
-                gridGap: '0px',
-                width: `${gridSize * cellSize}px`,
-                height: `${gridSize * cellSize}px`,
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                height: '100vh',
+                width: '100vw',
+                border: '2px solid black',
             }}
         >
-            {renderCells()}
+            {/* Left side: Future expansion */}
+            <div
+                style={{
+                    width: '20%',
+                    height: '100%',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                }}
+            >
+                <h3>Start Game</h3>
+                <button>Start</button>
+            </div>
 
-            {
-                punchPosition && (
-                    <div
-                        style={{
-                            gridRowStart: punchPosition.x + 1,
-                            gridColumnStart: punchPosition.y + 1,
-                            width: '100%',
-                            height: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: `${cellSize}px`,
-                            border: '1px solid black',
-                            backgroundColor: 'green',
-                        }}
-                    >
-                        👊
-                    </div>
-                )
-            }
+            {/* Center: Main playing area */}
+            <div
+                style={{
+                    width: gridWidth,
+                    height: gridHeight,
+                    position: 'relative', // Container for absolutely positioned players
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${gridSize}, ${cellSize}px)`,
+                    gridTemplateRows: `repeat(${gridSize}, ${cellSize}px)`,
+                    gridGap: '0px',
+                    border: '2px solid black',
+                }}
+            >
+                {renderCells()}
+                {sortedPlayerIds.map((playerId, index) => (
+                    <Player
+                        key={playerId}
+                        position={gameState.players[playerId].position}
+                        cellSize={cellSize}
+                        onMove={movePlayer} // expects an object {dx, dy}
+                        onPunch={handlePlayerPunch} // receives punch direction from Player
+                        isCurrentPlayer={playerId === socket.id}
+                        skin={playerSkins[index]} // assign skin based on order
+                    />
+                ))}
+                {gameState.fires.map((fire, index) => (
+                    <Fire key={index} position={fire} cellSize={cellSize} />
+                ))}
+            </div>
 
-            {Object.keys(gameState.players).map((playerId) => (
-                <Player
-                    key={playerId}
-                    position={gameState.players[playerId].position}
-                    lastDirection={gameState.players[playerId].lastDirection}
-                    onMove={(direction) => movePlayer(direction, playerId)}
-                    onPunch={() => handlePlayerPunch(playerId)}
-                    cellSize={cellSize}
-                    isCurrentPlayer={playerId === socket.id}
-                />
-            ))}
-
-            {gameState.fires.map((fire, index) => (
-                <Fire key={index} position={fire} cellSize={cellSize} />
-            ))}
+            {/* Right side: Player list with emojis */}
+            <div
+                style={{
+                    width: '20%',
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'flex-start',
+                    alignItems: 'center',
+                }}
+            >
+                <PlayerList players={gameState.players} />
+            </div>
         </div>
     );
 };
