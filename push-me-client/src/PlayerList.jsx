@@ -6,16 +6,28 @@ export const PlayerList = ({ players, currentSocketId }) => {
         <div className="player-list">
             <h3>Connected Players</h3>
             <ul style={{ listStyleType: 'none', padding: 0 }}>
-                {playerIds.map((playerId) => (
-                    <li key={playerId} style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-            <span style={{ marginRight: '8px', fontSize: '1.5rem' }}>
-              {players[playerId].skin || '😭'}
-            </span>
-                        <span>
-              {playerId} {playerId === currentSocketId ? "(you)" : ""}
-            </span>
-                    </li>
-                ))}
+                {playerIds.map((playerId) => {
+                    const player = players[playerId];
+                    return (
+                        <li
+                            key={playerId}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                marginBottom: '4px',
+                                color: player.isAlive === false ? 'red' : 'white'
+                            }}
+                        >
+              <span style={{ marginRight: '8px', fontSize: '1.5rem' }}>
+                {player.skin || '😭'}
+              </span>
+                            <span>
+                {playerId} {playerId === currentSocketId ? "(you)" : ""}{" "}
+                                {player.isAlive === false && "(spectating)"}
+              </span>
+                        </li>
+                    );
+                })}
             </ul>
         </div>
     );

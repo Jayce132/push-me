@@ -1,3 +1,4 @@
+// LobbyGrid.jsx
 import React, { useEffect, useState } from 'react';
 import { Player } from './Player.jsx';
 import { Ghost } from './Ghost';
@@ -25,10 +26,7 @@ const Cell = ({ x, y, cellSize }) => (
 );
 
 export const LobbyGrid = ({ setInLobby }) => {
-    const [gameState, setGameState] = useState({
-        players: {},
-        fires: [],
-    });
+    const [gameState, setGameState] = useState({ players: {}, fires: [] });
     const [socket, setSocket] = useState(null);
     const [gridSize, setGridSize] = useState(20);
     const cellSize = 32;
@@ -36,26 +34,37 @@ export const LobbyGrid = ({ setInLobby }) => {
     const innerGridHeight = gridSize * cellSize;
     const outerWidth = innerGridWidth + 2 * cellSize;
     const outerHeight = innerGridHeight + 2 * cellSize;
+    const [humanCount, setHumanCount] = useState(0);
 
     useEffect(() => {
-        // Connect to the lobby server on port 3001.
         const socket = io('http://localhost:3001');
         setSocket(socket);
+
         socket.on('connect', () => {
+            // Optionally save socket.id if needed.
         });
         socket.on('initializeGame', (data) => {
             setGridSize(data.gridSize);
         });
         socket.on('updateState', (updatedGameState) => {
             setGameState(updatedGameState);
+            // Count the effective human players (exclude bots).
+            const keys = Object.keys(updatedGameState.players);
+            const count = keys.filter((pid) => !updatedGameState.players[pid].isBot).length;
+            setHumanCount(count);
         });
         socket.on('noSafeSpawn', () => {
-            console.warn('No safe spawn location available in the lobby.');
+            console.warn('No safe spawn available in the lobby.');
+        });
+        // Listen for the "switchGame" event which tells the client to switch to game mode.
+        socket.on('switchGame', (data) => {
+            console.log("Switching to game at", data.gameUrl);
+            setInLobby(false);
         });
         return () => {
             socket.disconnect();
         };
-    }, []);
+    }, [setInLobby]);
 
     const movePlayer = (move) => {
         socket.emit('playerMove', move);
@@ -63,6 +72,11 @@ export const LobbyGrid = ({ setInLobby }) => {
 
     const handlePlayerPunch = (punchDir) => {
         socket.emit('playerPunch', punchDir);
+    };
+
+    const startGame = () => {
+        // Emit the startGame event to the server.
+        socket.emit('startGame');
     };
 
     const renderCells = () => {
@@ -85,7 +99,7 @@ export const LobbyGrid = ({ setInLobby }) => {
                 height: '100vh',
             }}
         >
-            {/* Left side: Additional lobby controls (e.g. chat, options) */}
+            {/* Left side: Lobby controls */}
             <div
                 style={{
                     width: '20%',
@@ -97,11 +111,11 @@ export const LobbyGrid = ({ setInLobby }) => {
                 }}
             >
                 <h3>Lobby</h3>
-                <button onClick={() => setInLobby(false)}>Start Game</button>
-                {/* Add future lobby controls here */}
+                <p>Humans in lobby: {humanCount}</p>
+                <button onClick={startGame}>Start Game</button>
             </div>
 
-            {/* Center: Game grid (lobby view, which can show players, etc.) */}
+            {/* Center: Game grid */}
             <div
                 style={{
                     position: 'relative',

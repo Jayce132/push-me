@@ -139,6 +139,7 @@ export const GameGrid = ({ setInLobby }) => {
                     {renderCells()}
                     {Object.keys(gameState.players).map((playerId) => {
                         const p = gameState.players[playerId];
+                        // Use the Bot component if it is a bot.
                         if (p.isBot) {
                             return (
                                 <Bot
@@ -150,7 +151,20 @@ export const GameGrid = ({ setInLobby }) => {
                                     punchDirection={p.punchDirection || { dx: 0, dy: 0 }}
                                 />
                             );
+                        } else if (!p.isAlive) {
+                            // Render the ghost component if the player is not alive.
+                            return (
+                                <Ghost
+                                    key={playerId}
+                                    position={p.position}
+                                    cellSize={cellSize}
+                                    onMove={movePlayer}
+                                    onPunch={handlePlayerPunch}
+                                    isCurrentPlayer={playerId === socket.id}
+                                />
+                            );
                         } else {
+                            // Render the normal player.
                             return (
                                 <Player
                                     key={playerId}
