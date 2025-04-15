@@ -13,53 +13,32 @@ const io = new Server(server, {
 });
 
 app.use(cors());
+
+// Grid configuration
 const gridSize = 25;
 
 // Define available skins for human players and the bot skin.
 const availableSkins = ['😭', '😫', '😳', '😨'];
 const botSkin = '🤖';
 
+// Place the fire in the exact middle cell and surround it
+
+const fires = [
+    { x: Math.floor(gridSize / 2), y: Math.floor(gridSize / 2) },
+    { x: Math.floor(gridSize / 2 - 1), y: Math.floor(gridSize / 2 - 1) },
+    { x: Math.floor(gridSize / 2 - 1), y: Math.floor(gridSize / 2) },
+    { x: Math.floor(gridSize / 2 - 1), y: Math.floor(gridSize / 2 + 1) },
+    { x: Math.floor(gridSize / 2), y: Math.floor(gridSize / 2 - 1) },
+    { x: Math.floor(gridSize / 2), y: Math.floor(gridSize / 2 + 1) },
+    { x: Math.floor(gridSize / 2 + 1), y: Math.floor(gridSize / 2 - 1) },
+    { x: Math.floor(gridSize / 2 + 1), y: Math.floor(gridSize / 2) },
+    { x: Math.floor(gridSize / 2 + 1), y: Math.floor(gridSize / 2 + 1) }
+];
+
+// Store connected players (humans and bot).
 const players = {};
-let fires = [{ x: Math.floor(Math.random() * gridSize), y: Math.floor(Math.random() * gridSize) }];
 
-const spreadFire = () => {
-    console.log("Fire is spreading...");
-    let newFires = [...fires];
-
-    fires.forEach((fire) => {
-        [[0, 1], [1, 0], [0, -1], [-1, 0]].forEach(([dx, dy]) => {
-            const newFireX = fire.x + dx;
-            const newFireY = fire.y + dy;
-
-            if (
-                Math.random() > 0.5 &&
-                !newFires.some(f => f.x === newFireX && f.y === newFireY) &&
-                newFireX >= 0 &&
-                newFireY >= 0 &&
-                newFireX < gridSize &&
-                newFireY < gridSize
-            ) {
-                newFires.push({ x: newFireX, y: newFireY });
-                Object.keys(players).forEach(playerId => {
-                    const player = players[playerId];
-                    if (player.position.x === newFireX && player.position.y === newFireY) {
-                        // For human players, instead of simply emitting 'gameOver',
-                        // send them to the lobby.
-                        if (!player.isBot) {
-                            io.to(playerId).emit('switchLobby', { lobbyUrl: 'http://localhost:3001' });
-                        } else {
-                            io.to(playerId).emit('gameOver', { socketId: playerId });
-                        }
-                        delete players[playerId];
-                    }
-                });
-            }
-        });
-    });
-    return newFires;
-};
-
-// Helper function: bounce a position back inside the grid.
+// Utility: keeps positions inside the grid.
 function bouncePosition(position, gridSize) {
     let { x, y } = position;
     if (x < 0) {
@@ -75,7 +54,7 @@ function bouncePosition(position, gridSize) {
     return { x, y };
 }
 
-// Check if a given cell is already occupied.
+// Check whether a given cell is occupied.
 function isCellOccupied(cell, exceptId = null) {
     return Object.keys(players).some(pid => {
         if (pid === exceptId) return false;
@@ -84,8 +63,28 @@ function isCellOccupied(cell, exceptId = null) {
     });
 }
 
+// Finds a safe spawn location that is at least 3 steps away from the fire and unoccupied.
+function findSafeSpawnLocation(gridSize, fires) {
+    const maxAttempts = 100;
+    for (let i = 0; i < maxAttempts; i++) {
+        const x = Math.floor(Math.random() * gridSize);
+        const y = Math.floor(Math.random() * gridSize);
+        const safe = fires.every(fire => {
+            const dx = Math.abs(x - fire.x);
+            const dy = Math.abs(y - fire.y);
+            return dx + dy >= 3;
+        });
+        if (safe && !isCellOccupied({ x, y })) {
+            return { x, y };
+        }
+    }
+    return null;
+}
+
+// When a human player moves, if they step onto the fire cell, respawn them at a safe location.
 function movePlayer(socket, move) {
     let newPlayerPosition = { ...players[socket.id].position };
+
     if (typeof move === 'object' && move !== null) {
         newPlayerPosition.x += move.dx;
         newPlayerPosition.y += move.dy;
@@ -108,78 +107,80 @@ function movePlayer(socket, move) {
         }
     }
     newPlayerPosition = bouncePosition(newPlayerPosition, gridSize);
+
     if (isCellOccupied(newPlayerPosition, socket.id)) {
         console.log(`Move blocked for ${socket.id}: cell occupied`);
         return;
     }
-    if (fires.some(fire => fire.x === newPlayerPosition.x && fire.y === newPlayerPosition.y)) {
-        // Instead of simply emitting 'gameOver', send human players to the lobby.
-        if (!players[socket.id].isBot) {
-            socket.emit('switchLobby', { lobbyUrl: 'http://localhost:3001' });
+
+    // If the new position is on fire, respawn at a safe location.
+    if (fires.some(f => f.x === newPlayerPosition.x && f.y === newPlayerPosition.y)) {
+        const safeLocation = findSafeSpawnLocation(gridSize, fires);
+        if (safeLocation) {
+            players[socket.id].position = safeLocation;
+            console.log(`Player ${socket.id} hit fire and respawned`);
         } else {
-            socket.emit('gameOver', { socketId: socket.id });
+            console.log(`No safe spawn available for player ${socket.id}`);
         }
     } else {
         players[socket.id].position = newPlayerPosition;
         players[socket.id].lastDirection = move;
-        io.emit('updateState', { players, fires });
     }
+    io.emit('updateState', { players, fires });
 }
 
-function findSafeSpawnLocation(gridSize, fires) {
-    const maxAttempts = 100;
-    for (let attempts = 0; attempts < maxAttempts; attempts++) {
-        const x = Math.floor(Math.random() * gridSize);
-        const y = Math.floor(Math.random() * gridSize);
-        const safe = fires.every(fire => {
-            const dx = Math.abs(x - fire.x);
-            const dy = Math.abs(y - fire.y);
-            return dx + dy >= 3;
-        });
-        if (safe && !isCellOccupied({ x, y })) {
-            return { x, y };
+// When a bot moves, if it lands on fire, respawn it.
+function moveBot(botId, move) {
+    let newPlayerPosition = { ...players[botId].position };
+    if (typeof move === 'object' && move !== null) {
+        newPlayerPosition.x += move.dx;
+        newPlayerPosition.y += move.dy;
+    }
+    newPlayerPosition = bouncePosition(newPlayerPosition, gridSize);
+
+    if (isCellOccupied(newPlayerPosition, botId)) {
+        console.log(`Bot move blocked for ${botId}: cell occupied`);
+        return;
+    }
+
+    if (fires.some(f => f.x === newPlayerPosition.x && f.y === newPlayerPosition.y)) {
+        const safeLocation = findSafeSpawnLocation(gridSize, fires);
+        if (safeLocation) {
+            players[botId].position = safeLocation;
+            console.log(`Bot ${botId} hit fire and respawned`);
+        } else {
+            console.log(`No safe spawn available for bot ${botId}`);
         }
+    } else {
+        players[botId].position = newPlayerPosition;
+        players[botId].lastDirection = move;
     }
-    return null;
+    io.emit('updateState', { players, fires });
 }
 
-let fireSpreadInterval = null;
-const updateFireInterval = () => {
-    // Compute effective human count.
-    const keys = Object.keys(players);
-    let effectiveHumanCount = keys.length;
-    if (keys.length > 0 && players[keys[0]].isBot) {
-        effectiveHumanCount = keys.length - 1;
-    }
-    // Start fire spread only when at least one human is connected.
-    if (effectiveHumanCount > 0 && !fireSpreadInterval) {
-        fireSpreadInterval = setInterval(() => {
-            fires = spreadFire(fires, gridSize);
-            io.emit('updateState', { players, fires });
-        }, 3000);
-    } else if (effectiveHumanCount === 0 && fireSpreadInterval) {
-        clearInterval(fireSpreadInterval);
-        fireSpreadInterval = null;
-    }
-};
-
-// Bot AI: if a human is adjacent (including diagonals), bot punches; otherwise, moves toward the nearest human.
+// Bot AI logic: move toward a nearby human or punch if adjacent.
 const botMoveLogic = (botId) => {
     const bot = players[botId];
     if (!bot) return;
+    // We care only if at least one human is present.
     const humanIds = Object.keys(players).filter(pid => !players[pid].isBot);
     if (humanIds.length === 0) return;
+
+    // Punch if a human is immediately adjacent.
     for (const humanId of humanIds) {
         const human = players[humanId];
         const diffX = Math.abs(human.position.x - bot.position.x);
         const diffY = Math.abs(human.position.y - bot.position.y);
         if (Math.max(diffX, diffY) === 1) {
-            const dx = human.position.x - bot.position.x;
-            const dy = human.position.y - bot.position.y;
-            botPunch(botId, { dx, dy });
+            botPunch(botId, {
+                dx: human.position.x - bot.position.x,
+                dy: human.position.y - bot.position.y,
+            });
             return;
         }
     }
+
+    // Otherwise, move toward the first human.
     const target = players[humanIds[0]];
     const diffX = target.position.x - bot.position.x;
     const diffY = target.position.y - bot.position.y;
@@ -188,41 +189,24 @@ const botMoveLogic = (botId) => {
     moveBot(botId, { dx: stepX, dy: stepY });
 };
 
-// Bot-specific move.
-function moveBot(botId, move) {
-    let newPlayerPosition = { ...players[botId].position };
-    if (typeof move === 'object' && move !== null) {
-        newPlayerPosition.x += move.dx;
-        newPlayerPosition.y += move.dy;
-    }
-    newPlayerPosition = bouncePosition(newPlayerPosition, gridSize);
-    if (isCellOccupied(newPlayerPosition, botId)) {
-        console.log(`Bot move blocked for ${botId}: cell occupied`);
-        return;
-    }
-    if (fires.some(f => f.x === newPlayerPosition.x && f.y === newPlayerPosition.y)) {
-        // For bots, delete them if they hit fire.
-        delete players[botId];
-    } else {
-        players[botId].position = newPlayerPosition;
-        players[botId].lastDirection = move;
-    }
-    io.emit('updateState', { players, fires });
-}
-
-// Bot punch.
+// If a bot punch pushes someone onto a fire, respawn them.
 function botPunch(botId, direction) {
     const punchingBot = players[botId];
     const { dx, dy } = direction;
     const targetX = punchingBot.position.x + dx;
     const targetY = punchingBot.position.y + dy;
+
     if (targetX < 0 || targetX >= gridSize || targetY < 0 || targetY >= gridSize) {
         let bounceX = punchingBot.position.x - dx * 3;
         let bounceY = punchingBot.position.y - dy * 3;
         bounceX = Math.max(0, Math.min(gridSize - 1, bounceX));
         bounceY = Math.max(0, Math.min(gridSize - 1, bounceY));
         if (fires.some(f => f.x === bounceX && f.y === bounceY)) {
-            delete players[botId];
+            const safe = findSafeSpawnLocation(gridSize, fires);
+            if (safe) {
+                players[botId].position = safe;
+                console.log(`Bot ${botId} hit fire on bounce and respawned`);
+            }
         } else {
             punchingBot.position.x = bounceX;
             punchingBot.position.y = bounceY;
@@ -230,24 +214,23 @@ function botPunch(botId, direction) {
         io.emit('updateState', { players, fires });
         return;
     }
+
     const punchedPlayerId = Object.keys(players).find(pid => {
         const p = players[pid];
         return !p.isBot && p.position.x === targetX && p.position.y === targetY;
     });
+
     if (punchedPlayerId) {
         const punchedPlayer = players[punchedPlayerId];
         const proposedX = punchedPlayer.position.x + dx * 3;
         const proposedY = punchedPlayer.position.y + dy * 3;
-        if (
-            proposedX >= 0 &&
-            proposedX < gridSize &&
-            proposedY >= 0 &&
-            proposedY < gridSize
-        ) {
+        if (proposedX >= 0 && proposedX < gridSize && proposedY >= 0 && proposedY < gridSize) {
             if (fires.some(f => f.x === proposedX && f.y === proposedY)) {
-                // For human players, send them to the lobby instead of plain game over.
-                io.to(punchedPlayerId).emit('switchLobby', { lobbyUrl: 'http://localhost:3001' });
-                delete players[punchedPlayerId];
+                const safe = findSafeSpawnLocation(gridSize, fires);
+                if (safe) {
+                    punchedPlayer.position = safe;
+                    console.log(`Player ${punchedPlayerId} hit fire due to bot punch and respawned`);
+                }
             } else {
                 punchedPlayer.position.x = proposedX;
                 punchedPlayer.position.y = proposedY;
@@ -258,17 +241,22 @@ function botPunch(botId, direction) {
             bounceX = Math.max(0, Math.min(gridSize - 1, bounceX));
             bounceY = Math.max(0, Math.min(gridSize - 1, bounceY));
             if (fires.some(f => f.x === bounceX && f.y === bounceY)) {
-                io.to(punchedPlayerId).emit('switchLobby', { lobbyUrl: 'http://localhost:3001' });
-                delete players[punchedPlayerId];
+                const safe = findSafeSpawnLocation(gridSize, fires);
+                if (safe) {
+                    punchedPlayer.position = safe;
+                    console.log(`Player ${punchedPlayerId} hit fire on bounce due to bot punch and respawned`);
+                }
             } else {
                 punchedPlayer.position.x = bounceX;
                 punchedPlayer.position.y = bounceY;
             }
         }
     }
+
     punchingBot.isPunching = true;
     punchingBot.punchDirection = { dx, dy };
     io.emit('updateState', { players, fires });
+
     setTimeout(() => {
         if (players[botId]) {
             players[botId].isPunching = false;
@@ -278,21 +266,29 @@ function botPunch(botId, direction) {
     }, 100);
 }
 
-// Spawn bot: clear any previous bot on reset.
+// Spawn a single bot at a safe location. The bot is intended to be the first element.
 function spawnBot() {
     const botId = "bot-" + Date.now();
-    console.log(`Spawn ${botId}`);
+    console.log(`Spawning bot: ${botId}`);
     const spawnLocation = findSafeSpawnLocation(gridSize, fires);
     if (!spawnLocation) return;
-    players[botId] = { position: spawnLocation, skin: botSkin, isBot: true, lastDirection: { dx: 0, dy: 1 } };
+    players[botId] = {
+        position: spawnLocation,
+        skin: botSkin,
+        isBot: true,
+        lastDirection: { dx: 0, dy: 1 },
+    };
     io.emit('updateState', { players, fires });
+    // Start the bot's AI.
     setInterval(() => {
         botMoveLogic(botId);
     }, 250);
 }
 
+// Handle player connections and game events.
 io.on('connection', (socket) => {
     console.log(`Player connected: ${socket.id}`);
+
     const spawnLocation = findSafeSpawnLocation(gridSize, fires);
     if (!spawnLocation) {
         console.log(`No safe spawn for player: ${socket.id}. Disconnecting.`);
@@ -300,27 +296,37 @@ io.on('connection', (socket) => {
         socket.disconnect(true);
         return;
     }
-    const usedSkins = Object.values(players).filter(p => !p.isBot).map(p => p.skin);
-    const skin = availableSkins.find(s => !usedSkins.includes(s)) || availableSkins[0];
-    players[socket.id] = { position: spawnLocation, skin, isBot: false, lastDirection: { dx: 0, dy: -1 } };
 
-    updateFireInterval();
+    // Choose an available skin.
+    const usedSkins = Object.values(players)
+        .filter(p => !p.isBot)
+        .map(p => p.skin);
+    const skin = availableSkins.find(s => !usedSkins.includes(s)) || availableSkins[0];
+    players[socket.id] = {
+        position: spawnLocation,
+        skin,
+        isBot: false,
+        lastDirection: { dx: 0, dy: -1 },
+    };
+
     socket.emit('initializeGame', { gridSize });
 
-    // NEW: If only one human is connected and no bot exists, spawn a bot.
+    // Spawn a bot if no bot exists and only and at least one human is connected
+    // The lobby always has a bot no matter how many active players
     {
         const keys = Object.keys(players);
         const hasBot = keys.some(pid => players[pid].isBot);
         const effectiveHumanCount = hasBot ? keys.length - 1 : keys.length;
-        if (effectiveHumanCount === 1 && !hasBot) {
+        if (effectiveHumanCount >= 1 && !hasBot) {
             spawnBot();
         }
     }
 
+    socket.emit('updateState', { players, fires });
+
     socket.on('playerMove', (move) => {
-        console.log(`Move event received for player ${socket.id}:`, move);
+        console.log(`Move event from ${socket.id}:`, move);
         movePlayer(socket, move);
-        io.emit('updateState', { players, fires });
     });
 
     socket.on('playerPunch', (punchDir) => {
@@ -330,6 +336,7 @@ io.on('connection', (socket) => {
             dx = punchDir.dx;
             dy = punchDir.dy;
         } else {
+            // Use the player's last direction.
             switch (punchingPlayer.lastDirection) {
                 case 'up':
                     dx = -1;
@@ -355,9 +362,11 @@ io.on('connection', (socket) => {
             bounceX = Math.max(0, Math.min(gridSize - 1, bounceX));
             bounceY = Math.max(0, Math.min(gridSize - 1, bounceY));
             if (fires.some(f => f.x === bounceX && f.y === bounceY)) {
-                // For a human, send them to the lobby.
-                socket.emit('switchLobby', { lobbyUrl: 'http://localhost:3001' });
-                delete players[socket.id];
+                const safe = findSafeSpawnLocation(gridSize, fires);
+                if (safe) {
+                    players[socket.id].position = safe;
+                    console.log(`Player ${socket.id} hit fire during punch bounce and respawned`);
+                }
             } else {
                 punchingPlayer.position.x = bounceX;
                 punchingPlayer.position.y = bounceY;
@@ -371,16 +380,13 @@ io.on('connection', (socket) => {
                 const punchedPlayer = players[punchedPlayerId];
                 const proposedX = punchedPlayer.position.x + dx * 3;
                 const proposedY = punchedPlayer.position.y + dy * 3;
-                if (
-                    proposedX >= 0 &&
-                    proposedX < gridSize &&
-                    proposedY >= 0 &&
-                    proposedY < gridSize
-                ) {
+                if (proposedX >= 0 && proposedX < gridSize && proposedY >= 0 && proposedY < gridSize) {
                     if (fires.some(f => f.x === proposedX && f.y === proposedY)) {
-                        // For humans, redirect them to the lobby.
-                        io.to(punchedPlayerId).emit('switchLobby', { lobbyUrl: 'http://localhost:3001' });
-                        delete players[punchedPlayerId];
+                        const safe = findSafeSpawnLocation(gridSize, fires);
+                        if (safe) {
+                            punchedPlayer.position = safe;
+                            console.log(`Player ${punchedPlayerId} hit fire due to punch and respawned`);
+                        }
                     } else {
                         punchedPlayer.position.x = proposedX;
                         punchedPlayer.position.y = proposedY;
@@ -391,8 +397,11 @@ io.on('connection', (socket) => {
                     bounceX = Math.max(0, Math.min(gridSize - 1, bounceX));
                     bounceY = Math.max(0, Math.min(gridSize - 1, bounceY));
                     if (fires.some(f => f.x === bounceX && f.y === bounceY)) {
-                        io.to(punchedPlayerId).emit('switchLobby', { lobbyUrl: 'http://localhost:3001' });
-                        delete players[punchedPlayerId];
+                        const safe = findSafeSpawnLocation(gridSize, fires);
+                        if (safe) {
+                            punchedPlayer.position = safe;
+                            console.log(`Player ${punchedPlayerId} hit fire on punch bounce and respawned`);
+                        }
                     } else {
                         punchedPlayer.position.x = bounceX;
                         punchedPlayer.position.y = bounceY;
@@ -407,29 +416,30 @@ io.on('connection', (socket) => {
         console.log(`Player disconnected: ${socket.id}`);
         delete players[socket.id];
         io.emit('updateState', { players, fires });
-        // Compute effective human count.
+
+        // Compute the effective number of human players.
         const keys = Object.keys(players);
-        let effectiveHumanCount = keys.length;
+        let humanPlayers = keys.length;
         if (keys.length > 0 && players[keys[0]].isBot) {
-            effectiveHumanCount = keys.length - 1;
+            humanPlayers = keys.length - 1;
         }
-        console.log("Effective human count:", effectiveHumanCount);
-        if (effectiveHumanCount === 0) {
+
+        // Reset the grid if there are no human players.
+        if (humanPlayers === 0) {
             resetGrid();
-            updateFireInterval();
         }
     });
 });
 
-server.listen(3000, () => {
-    console.log('Server is running on port 3000');
-});
-
+// Reset the grid: clear all players, reset the fire, and spawn one bot.
 function resetGrid() {
-    console.log("Grid reset..");
-    // Clear all players (including any bot)
+    console.log("Resetting grid...");
+    // Clear all players (clearing the bot as well)
     Object.keys(players).forEach(pid => delete players[pid]);
-    // Reset fire position.
-    fires = [{ x: Math.floor(Math.random() * gridSize), y: Math.floor(Math.random() * gridSize) }];
     spawnBot();
+    io.emit('updateState', { players, fires });
 }
+
+server.listen(3001, () => {
+    console.log("Lobby server running on port 3001");
+});

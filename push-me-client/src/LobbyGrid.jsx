@@ -3,9 +3,9 @@ import { Player } from './Player.jsx';
 import { Ghost } from './Ghost';
 import { Fire } from './Fire';
 import { PlayerList } from './PlayerList';
-import { Wall } from './Wall'; // import our new Wall component
+import { Wall } from './Wall'; // reuse your Wall component
 import { io } from 'socket.io-client';
-import {Bot} from "./Bot.jsx";
+import { Bot } from './Bot.jsx';
 
 const Cell = ({ x, y, cellSize }) => (
     <div
@@ -24,26 +24,24 @@ const Cell = ({ x, y, cellSize }) => (
     ></div>
 );
 
-export const Grid = () => {
+export const LobbyGrid = ({ setInLobby }) => {
     const [gameState, setGameState] = useState({
         players: {},
         fires: [],
     });
     const [socket, setSocket] = useState(null);
     const [gridSize, setGridSize] = useState(20);
-    const [currentSocketId, setCurrentSocketId] = useState(null);
     const cellSize = 32;
     const innerGridWidth = gridSize * cellSize;
     const innerGridHeight = gridSize * cellSize;
-    // Outer container size includes walls (one cell on each side).
     const outerWidth = innerGridWidth + 2 * cellSize;
     const outerHeight = innerGridHeight + 2 * cellSize;
 
     useEffect(() => {
-        const socket = io('http://localhost:3000');
+        // Connect to the lobby server on port 3001.
+        const socket = io('http://localhost:3001');
         setSocket(socket);
         socket.on('connect', () => {
-            setCurrentSocketId(socket.id);
         });
         socket.on('initializeGame', (data) => {
             setGridSize(data.gridSize);
@@ -51,15 +49,8 @@ export const Grid = () => {
         socket.on('updateState', (updatedGameState) => {
             setGameState(updatedGameState);
         });
-        socket.on('gameOver', (data) => {
-            if (data.socketId === socket.id) {
-                socket.disconnect();
-                alert('Game Over 😭🔥');
-            }
-        });
         socket.on('noSafeSpawn', () => {
-            socket.disconnect();
-            alert('No safe spaces to spawn 😭🔥');
+            console.warn('No safe spawn location available in the lobby.');
         });
         return () => {
             socket.disconnect();
@@ -94,7 +85,7 @@ export const Grid = () => {
                 height: '100vh',
             }}
         >
-            {/* Left side: Future expansion */}
+            {/* Left side: Additional lobby controls (e.g. chat, options) */}
             <div
                 style={{
                     width: '20%',
@@ -105,11 +96,12 @@ export const Grid = () => {
                     alignItems: 'center',
                 }}
             >
-                <h3>Start Game</h3>
-                <button>Start</button>
+                <h3>Lobby</h3>
+                <button onClick={() => setInLobby(false)}>Start Game</button>
+                {/* Add future lobby controls here */}
             </div>
 
-            {/* Center: Outer container with walls */}
+            {/* Center: Game grid (lobby view, which can show players, etc.) */}
             <div
                 style={{
                     position: 'relative',
@@ -117,9 +109,7 @@ export const Grid = () => {
                     height: outerHeight,
                 }}
             >
-                {/* Render the walls as a border */}
                 <Wall gridSize={gridSize} cellSize={cellSize} />
-                {/* Render the inner game grid offset by one cell */}
                 <div
                     style={{
                         position: 'absolute',
@@ -155,7 +145,7 @@ export const Grid = () => {
                                     cellSize={cellSize}
                                     onMove={movePlayer}
                                     onPunch={handlePlayerPunch}
-                                    isCurrentPlayer={playerId === socket.id}
+                                    isCurrentPlayer={playerId === (socket ? socket.id : null)}
                                     skin={p.skin}
                                 />
                             );
@@ -167,7 +157,7 @@ export const Grid = () => {
                 </div>
             </div>
 
-            {/* Right side: Player list with emojis and (you) for current client */}
+            {/* Right side: Player list */}
             <div
                 style={{
                     width: '20%',
@@ -178,8 +168,10 @@ export const Grid = () => {
                     alignItems: 'center',
                 }}
             >
-                <PlayerList players={gameState.players} currentSocketId={currentSocketId} />
+                <PlayerList players={gameState.players} currentSocketId={socket ? socket.id : null} />
             </div>
         </div>
     );
 };
+
+export default LobbyGrid;
