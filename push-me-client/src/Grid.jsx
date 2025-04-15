@@ -5,6 +5,7 @@ import { Fire } from './Fire';
 import { PlayerList } from './PlayerList';
 import { Wall } from './Wall'; // import our new Wall component
 import { io } from 'socket.io-client';
+import {Bot} from "./Bot.jsx";
 
 const Cell = ({ x, y, cellSize }) => (
     <div
@@ -133,17 +134,33 @@ export const Grid = () => {
                     }}
                 >
                     {renderCells()}
-                    {Object.keys(gameState.players).map((playerId) => (
-                        <Player
-                            key={playerId}
-                            position={gameState.players[playerId].position}
-                            cellSize={cellSize}
-                            onMove={movePlayer}
-                            onPunch={handlePlayerPunch}
-                            isCurrentPlayer={playerId === socket.id}
-                            skin={gameState.players[playerId].skin} // skin comes from the server
-                        />
-                    ))}
+                    {Object.keys(gameState.players).map((playerId) => {
+                        const p = gameState.players[playerId];
+                        if (p.isBot) {
+                            return (
+                                <Bot
+                                    key={playerId}
+                                    position={p.position}
+                                    cellSize={cellSize}
+                                    skin={p.skin}
+                                    isPunching={p.isPunching || false}
+                                    punchDirection={p.punchDirection || { dx: 0, dy: 0 }}
+                                />
+                            );
+                        } else {
+                            return (
+                                <Player
+                                    key={playerId}
+                                    position={p.position}
+                                    cellSize={cellSize}
+                                    onMove={movePlayer}
+                                    onPunch={handlePlayerPunch}
+                                    isCurrentPlayer={playerId === socket.id}
+                                    skin={p.skin}
+                                />
+                            );
+                        }
+                    })}
                     {gameState.fires.map((fire, index) => (
                         <Fire key={index} position={fire} cellSize={cellSize} />
                     ))}
