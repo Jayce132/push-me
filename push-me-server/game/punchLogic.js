@@ -26,16 +26,43 @@ function handlePunchGame(socket, punchDir, { players, fires, gridSize, io }) {
         }
     }
 
+    // Calculate the target punch coordinates.
     const targetX = punchingPlayer.position.x + dx;
     const targetY = punchingPlayer.position.y + dy;
 
+    // --- Ghost-specific punch logic ---
+    // If the punching player is a ghost, try to extinguish fire on the target cell.
+    if (!punchingPlayer.isAlive) {
+        const fireIndex = fires.findIndex(f => f.x === targetX && f.y === targetY);
+        if (fireIndex !== -1) {
+            // Extinguish the fire cell.
+            fires.splice(fireIndex, 1);
+            console.log(`Ghost ${socket.id} extinguished fire at (${targetX}, ${targetY})`);
+        }
+        // If all fires have been extinguished, send all human players to the lobby and reset isAlive.
+        if (fires.length === 0) {
+            console.log("All fires extinguished. Sending all players to lobby and resetting isAlive status.");
+            Object.keys(players).forEach(pid => {
+                const player = players[pid];
+                if (!player.isBot) {
+                    io.to(pid).emit('switchLobby', { lobbyUrl: 'http://localhost:3001' });
+                    // Reset isAlive so the player can play again later.
+                    player.isAlive = true;
+                }
+            });
+        }
+        io.emit('updateState', { players, fires });
+        return; // End ghost punch processing.
+    }
+
+    // --- Normal punch logic for alive players below ---
     if (targetX < 0 || targetX >= gridSize || targetY < 0 || targetY >= gridSize) {
         let bounceX = punchingPlayer.position.x - dx * 3;
         let bounceY = punchingPlayer.position.y - dy * 3;
         bounceX = Math.max(0, Math.min(gridSize - 1, bounceX));
         bounceY = Math.max(0, Math.min(gridSize - 1, bounceY));
         if (fires.some(f => f.x === bounceX && f.y === bounceY)) {
-            // Instead of sending the player to lobby and deleting, mark as dead.
+            // Instead of sending the player to the lobby and deleting, mark as dead.
             players[socket.id].isAlive = false;
             console.log(`Player ${socket.id} died from out-of-bound punch bounce (isAlive set to false)`);
         } else {
@@ -53,7 +80,6 @@ function handlePunchGame(socket, punchDir, { players, fires, gridSize, io }) {
             const proposedY = punchedPlayer.position.y + dy * 3;
             if (proposedX >= 0 && proposedX < gridSize && proposedY >= 0 && proposedY < gridSize) {
                 if (fires.some(f => f.x === proposedX && f.y === proposedY)) {
-                    // Instead of switching lobby and deleting, mark as dead.
                     punchedPlayer.isAlive = false;
                     console.log(`Player ${punchedPlayerId} died from punch collision (isAlive set to false)`);
                 } else {
@@ -76,8 +102,9 @@ function handlePunchGame(socket, punchDir, { players, fires, gridSize, io }) {
         }
     }
     io.emit('updateState', { players, fires });
-    // (A check for the number of alive humans can be done in the update cycle in app.js.)
 }
+
+
 
 /**
  * Handles player punch logic in lobby mode.

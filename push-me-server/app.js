@@ -108,13 +108,10 @@ io.on('connection', (socket) => {
     });
 
     socket.on('playerPunch', (punchDir) => {
-        // Check if the player is alive. In game mode, ghost players cannot punch.
-        if (!players[socket.id].isAlive) {
-            console.log(`Ghost ${socket.id} attempted to punch, but punches are disabled for ghosts.`);
-            return;  // Early exit: do nothing.
-        }
+        // Always process punch events, even for ghost players.
         handlePunchGame(socket, punchDir, { players, fires, gridSize, io });
     });
+
 
     socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.id}`);

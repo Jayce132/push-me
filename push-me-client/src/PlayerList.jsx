@@ -23,7 +23,7 @@ export const PlayerList = ({ players, currentSocketId }) => {
               </span>
                             <span>
                 {playerId} {playerId === currentSocketId ? "(you)" : ""}{" "}
-                                {player.isAlive === false && "(spectating)"}
+                                {player.isAlive === false && "(ghost)"}
               </span>
                         </li>
                     );
