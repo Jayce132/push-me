@@ -1,19 +1,20 @@
-// game/movement.js
 const { bouncePosition, isCellOccupied, findSafeSpawnLocation } = require('./physics');
 const { gridSize, players } = require('./constants');
 
 /**
- * Moves a player based on the move command.
- * (This function remains unchanged because it handles human players.)
- * @param {string} gameMode - Either "game" or "lobby". (For players this branch remains.)
+ * Moves a human player based on the move command.
+ * In game mode (fires nonempty), if the new cell contains fire, the player is marked dead.
+ * In lobby mode (fires empty), the move simply updates the player's position.
+ *
  * @param {object} socket - The socket representing the connection.
  * @param {object|string} move - The move command.
- * @param {Array} fires - The current array of fire cells.
  * @param {object} io - The socket.io instance.
+ * @param {Array} fires - The current array of fire cells (defaults to empty, which means lobby mode).
  */
-function movePlayer(gameMode, socket, move, fires, io) {
+function movePlayer(socket, move, io, fires = []) {
     let newPlayerPosition = { ...players[socket.id].position };
 
+    // If move is an object, add dx/dy; otherwise, handle string commands.
     if (typeof move === 'object' && move !== null) {
         newPlayerPosition.x += move.dx;
         newPlayerPosition.y += move.dy;
@@ -36,17 +37,20 @@ function movePlayer(gameMode, socket, move, fires, io) {
         }
     }
 
+    // Apply bounce to keep within the grid.
     newPlayerPosition = bouncePosition(newPlayerPosition, gridSize);
 
+    // Block move if the target cell is occupied.
     if (isCellOccupied(newPlayerPosition, socket.id)) {
         console.log(`Move blocked for ${socket.id}: cell occupied`);
         return;
     }
 
-    if (fires.some(fire => fire.x === newPlayerPosition.x && fire.y === newPlayerPosition.y)) {
-        if (gameMode === 'game') {
+    // If we're in game mode (fires exist), check for collision with fire.
+    if (fires.length > 0) {
+        if (fires.some(fire => fire.x === newPlayerPosition.x && fire.y === newPlayerPosition.y)) {
             if (!players[socket.id].isBot) {
-                // Mark the player as dead rather than sending them to the lobby immediately.
+                // In game mode, mark human players as dead if they hit fire.
                 players[socket.id].isAlive = false;
                 console.log(`Player ${socket.id} touched fire and is now dead (spectating)`);
                 io.emit('updateState', { players, fires });
@@ -56,61 +60,15 @@ function movePlayer(gameMode, socket, move, fires, io) {
                 delete players[socket.id];
                 return;
             }
-        } else if (gameMode === 'lobby') {
-            const safeLocation = findSafeSpawnLocation(gridSize, fires);
-            if (safeLocation) {
-                players[socket.id].position = safeLocation;
-                console.log(`Player ${socket.id} hit fire and respawned (lobby mode)`);
-            } else {
-                console.log(`No safe spawn available for player ${socket.id}`);
-            }
         }
-    } else {
-        players[socket.id].position = newPlayerPosition;
-        players[socket.id].lastDirection = move;
-        io.emit('updateState', { players, fires });
-    }
-}
-
-
-/**
- * Moves a bot based on the move command.
- * Now the bot behavior is always the lobby behavior.
- * @param {string} botId - The ID of the bot.
- * @param {object} move - The move command (object with dx and dy).
- * @param {Array} fires - The current array of fire cells.
- * @param {object} io - The socket.io instance.
- */
-function moveBot(botId, move, fires, io) {
-    let newPlayerPosition = { ...players[botId].position };
-
-    if (typeof move === 'object' && move !== null) {
-        newPlayerPosition.x += move.dx;
-        newPlayerPosition.y += move.dy;
     }
 
-    newPlayerPosition = bouncePosition(newPlayerPosition, gridSize);
-
-    if (isCellOccupied(newPlayerPosition, botId)) {
-        console.log(`Bot move blocked for ${botId}: cell occupied`);
-        return;
-    }
-
-    // In lobby mode, when a bot hits fire, respawn it (instead of deleting it)
-    if (fires.some(f => f.x === newPlayerPosition.x && f.y === newPlayerPosition.y)) {
-        const safeLocation = findSafeSpawnLocation(gridSize, fires);
-        if (safeLocation) {
-            players[botId].position = safeLocation;
-            console.log(`Bot ${botId} hit fire and respawned (lobby mode)`);
-        } else {
-            console.log(`No safe spawn available for bot ${botId} (lobby mode)`);
-        }
-    } else {
-        players[botId].position = newPlayerPosition;
-        players[botId].lastDirection = move;
-    }
+    // Update the player's state.
+    players[socket.id].position = newPlayerPosition;
+    // If move is an object, use that as the lastDirection.
+    players[socket.id].lastDirection = (typeof move === 'object' && move !== null) ? move : players[socket.id].lastDirection;
 
     io.emit('updateState', { players, fires });
 }
 
-module.exports = { movePlayer, moveBot };
+module.exports = { movePlayer };

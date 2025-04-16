@@ -1,4 +1,3 @@
-// lobby.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -7,11 +6,12 @@ const cors = require('cors');
 // Import shared modules.
 const { findSafeSpawnLocation } = require('./game/physics');
 const { gridSize, availableSkins, botSkin, players } = require('./game/constants');
-// Import the generic movement functions.
-const { movePlayer: sharedMovePlayer, moveBot: sharedMoveBot } = require('./game/movement');
-// Import generic bot logic functions.
-const { botMoveLogic, botPunch } = require('./game/botLogic');
-const { handlePunchLobby } = require('./game/punchLogic');
+// Import the shared movement function for human players.
+const { movePlayer } = require('./game/movement');
+// Import punch logic for lobby.
+const { handlePunch} = require('./game/punchLogic');
+// Import our Bot entity.
+const Bot = require('./game/Bot');
 
 const app = express();
 const server = http.createServer(app);
@@ -24,20 +24,7 @@ const io = new Server(server, {
 
 app.use(cors());
 
-// In the lobby we use a fixed fire pattern (center and surrounding cells).
-const fires = [
-    { x: Math.floor(gridSize / 2), y: Math.floor(gridSize / 2) },
-    { x: Math.floor(gridSize / 2 - 1), y: Math.floor(gridSize / 2 - 1) },
-    { x: Math.floor(gridSize / 2 - 1), y: Math.floor(gridSize / 2) },
-    { x: Math.floor(gridSize / 2 - 1), y: Math.floor(gridSize / 2 + 1) },
-    { x: Math.floor(gridSize / 2), y: Math.floor(gridSize / 2 - 1) },
-    { x: Math.floor(gridSize / 2), y: Math.floor(gridSize / 2 + 1) },
-    { x: Math.floor(gridSize / 2 + 1), y: Math.floor(gridSize / 2 - 1) },
-    { x: Math.floor(gridSize / 2 + 1), y: Math.floor(gridSize / 2) },
-    { x: Math.floor(gridSize / 2 + 1), y: Math.floor(gridSize / 2 + 1) }
-];
-
-// In lobby mode fire is static; we do not spread it.
+const fires = [];
 
 io.on('connection', (socket) => {
     console.log(`Lobby: Player connected: ${socket.id}`);
@@ -48,6 +35,7 @@ io.on('connection', (socket) => {
         socket.disconnect(true);
         return;
     }
+    // Ensure unique skins for human players.
     const usedSkins = Object.values(players)
         .filter(p => !p.isBot)
         .map(p => p.skin);
@@ -66,11 +54,12 @@ io.on('connection', (socket) => {
     // When a player moves, use sharedMovePlayer with gameMode "lobby".
     socket.on('playerMove', (move) => {
         console.log(`Lobby: Move event from ${socket.id}:`, move);
-        sharedMovePlayer("lobby", socket, move, fires, io);
+        movePlayer(socket, move, io, fires);
     });
 
+    // Handle the punch event for lobby players.
     socket.on('playerPunch', (punchDir) => {
-        handlePunchLobby(socket, punchDir, { players, fires, gridSize, findSafeSpawnLocation, io });
+        handlePunch(socket, punchDir, { players, gridSize, findSafeSpawnLocation, io });
     });
 
     // When a "startGame" event is received, broadcast "switchGame" with the game URL.
@@ -88,7 +77,7 @@ io.on('connection', (socket) => {
         const humanCount = Object.values(players).filter(p => !p.isBot).length;
         console.log("Lobby human count:", humanCount);
 
-        // If no human players remain, clear the players object (removing the bot).
+        // If no human players remain, clear the players object (removing any bots).
         if (humanCount === 0) {
             for (let pid in players) {
                 delete players[pid];
@@ -107,22 +96,29 @@ io.on('connection', (socket) => {
 
 // In lobby mode, players and bots never die.
 // When there is at least one human, spawn the bot (only one bot should exist).
-// When no human players are connected, remove the bot and clear the players object.
 function spawnBot() {
     const botId = "bot-" + Date.now();
     console.log(`Lobby: Spawning bot: ${botId}`);
     const spawnLocation = findSafeSpawnLocation(gridSize, fires);
     if (!spawnLocation) return;
+
+    // Create the game context that will be shared with the Bot.
+    const gameContext = { players, fires, io, gridSize };
+    // Create a new Bot instance.
+    const bot = new Bot(botId, spawnLocation, gameContext);
+
+    // Add the bot to the global players list.
     players[botId] = {
-        position: spawnLocation,
-        skin: botSkin,
+        position: bot.position,
+        skin: bot.skin,
         isBot: true,
-        lastDirection: { dx: 0, dy: 1 }
+        lastDirection: bot.lastDirection
     };
     io.emit('updateState', { players, fires });
-    // In lobby mode, the bot continuously moves using lobby logic.
+
+    // In lobby mode, continuously update the bot's behavior.
     setInterval(() => {
-        botMoveLogic(botId, sharedMoveBot, botPunch, fires, io);
+        bot.update();
     }, 250);
 }
 

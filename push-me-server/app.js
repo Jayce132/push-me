@@ -8,8 +8,8 @@ const cors = require('cors');
 const { findSafeSpawnLocation } = require('./game/physics');
 const { gridSize, availableSkins, botSkin, players } = require('./game/constants');
 // Import movement functions.
-const { movePlayer: sharedMovePlayer, moveBot: sharedMoveBot } = require('./game/movement');
-const { handlePunchGame } = require('./game/punchLogic');
+const { movePlayer } = require('./game/movement');
+const { handlePunch} = require('./game/punchLogic');
 
 const app = express();
 const server = http.createServer(app);
@@ -104,12 +104,12 @@ io.on('connection', (socket) => {
 
     socket.on('playerMove', (move) => {
         console.log(`Move event from ${socket.id}:`, move);
-        sharedMovePlayer("game", socket, move, fires, io);
+        movePlayer(socket, move, io, fires);
     });
 
     socket.on('playerPunch', (punchDir) => {
         // Always process punch events, even for ghost players.
-        handlePunchGame(socket, punchDir, { players, fires, gridSize, io });
+        handlePunch(socket, punchDir, { players, gridSize, io, fires });
     });
 
 

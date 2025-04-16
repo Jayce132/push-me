@@ -165,9 +165,6 @@ export const LobbyGrid = ({ setInLobby }) => {
                             );
                         }
                     })}
-                    {gameState.fires.map((fire, index) => (
-                        <Fire key={index} position={fire} cellSize={cellSize} />
-                    ))}
                 </div>
             </div>
 
