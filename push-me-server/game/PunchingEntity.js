@@ -1,10 +1,12 @@
 // game/PunchingEntity.js
+const EventEmitter = require('events');
+
 class PunchingEntity {
     /**
      * @param {string} id
      * @param {{x:number,y:number}} position
      * @param {string} skin
-     * @param {object} gameContext  // { players, io, gridSize, physicsEngine }
+     * @param {object} gameContext  // { players, gridSize, physicsEngine, eventEmitter }
      */
     constructor(id, position, skin, gameContext) {
         this.id = id;
@@ -13,10 +15,12 @@ class PunchingEntity {
         this.lastDirection = { dx: 0, dy: -1 };
         this.isAlive = true;
         this.isBot = false;
-        this.gameContext = gameContext;
+        this.gameContext = gameContext;  // includes physicsEngine & EventEmitter
     }
 
-    /** Strip non‑serializable fields for socket.io */
+    /**
+     * toJSON stripped of non‑serializable fields for socket.io updates
+     */
     toJSON() {
         return {
             id: this.id,
@@ -30,9 +34,16 @@ class PunchingEntity {
         };
     }
 
-    /** Shared move logic */
+    /**
+     * Shared move logic:
+     * 1) compute new position from input
+     * 2) bounce off walls
+     * 3) prevent occupying same cell
+     * 4) handle fire collision (kills player)
+     * 5) commit and notify server
+     */
     move(move, fires = []) {
-        const { players, io, physicsEngine } = this.gameContext;
+        const { players, physicsEngine, eventEmitter } = this.gameContext;
         let newPos = { ...this.position };
 
         // 1) Direction
@@ -57,106 +68,94 @@ class PunchingEntity {
             return;
         }
 
-        // 4) Fire collision (game mode)
-        if (fires.length > 0 && fires.some(f => f.x === newPos.x && f.y === newPos.y)) {
-            if (!this.isBot) {
+        // 4) Fire collision
+        if (fires.some(f => f.x === newPos.x && f.y === newPos.y)) {
+            if (!this.isBot && this.isAlive) {
                 this.isAlive = false;
-            } else {
-                io.to(this.id).emit('gameOver', { socketId: this.id });
-                delete players[this.id];
+                eventEmitter.emit('playerDied', this.id);
             }
-            io.emit('updateState', { players, fires });
+            eventEmitter.emit('entityUpdated', this.id);
             return;
         }
 
         // 5) Commit
         this.position = newPos;
         if (move && typeof move.dx === 'number') this.lastDirection = move;
-        players[this.id].position = this.position;
+        players[this.id].position = newPos;
         players[this.id].lastDirection = this.lastDirection;
-        io.emit('updateState', { players, fires });
+        eventEmitter.emit('entityUpdated', this.id);
     }
 
-    /** Shared punch logic */
+    /**
+     * Shared punch logic:
+     * - Ghosts extinguish fires
+     * - Normal entities knock back either themselves or victims
+     */
     punch(dir, fires = []) {
-        const { players, io, physicsEngine } = this.gameContext;
+        const { players, physicsEngine, eventEmitter } = this.gameContext;
         const gameMode = fires.length > 0;
-        let dx = 0, dy = 0;
 
-        if (dir && typeof dir.dx === 'number') {
-            dx = dir.dx; dy = dir.dy;
-        } else {
-            ({ dx, dy } = this.lastDirection);
-        }
+        // Determine punch vector
+        const vec = (dir && typeof dir.dx === 'number') ? dir : this.lastDirection;
+        const tx = this.position.x + vec.dx;
+        const ty = this.position.y + vec.dy;
 
-        const tx = this.position.x + dx, ty = this.position.y + dy;
-
-        // Ghost extinguishes
+        // --- Ghost Mode: extinguish fires ---
         if (!this.isAlive && gameMode) {
             const idx = fires.findIndex(f => f.x === tx && f.y === ty);
-            if (idx !== -1) fires.splice(idx, 1);
-            if (fires.length === 0) {
-                Object.values(players).forEach(p => {
-                    if (!p.isBot) {
-                        io.to(p.id).emit('switchLobby', { lobbyUrl: 'http://localhost:3001' });
-                        p.isAlive = true;
-                    }
-                });
+            if (idx !== -1) {
+                // remove fire locally
+                fires.splice(idx, 1);
+                // notify FireManager
+                eventEmitter.emit('extinguishFire', { x: tx, y: ty });
             }
-            io.emit('updateState', { players, fires });
+            eventEmitter.emit('entityUpdated', this.id);
             return;
         }
 
-        // Out‑of‑bounds bounce
+        // --- Self‑Knockback: attacker hits wall ---
         if (tx < 0 || tx >= physicsEngine.gridSize || ty < 0 || ty >= physicsEngine.gridSize) {
-            let bx = this.position.x - dx * 3, by = this.position.y - dy * 3;
-            bx = Math.max(0, Math.min(physicsEngine.gridSize - 1, bx));
-            by = Math.max(0, Math.min(physicsEngine.gridSize - 1, by));
-
-            if (gameMode && fires.some(f => f.x === bx && f.y === by)) {
+            const { position, died } = physicsEngine.computeSelfKnockback(
+                this.position, vec, fires
+            );
+            this.position = position;
+            if (died && this.isAlive) {
                 this.isAlive = false;
-            } else {
-                this.position = { x: bx, y: by };
+                eventEmitter.emit('playerDied', this.id);
             }
-            players[this.id].position = this.position;
-            io.emit('updateState', { players, fires });
+            players[this.id].position = position;
+            eventEmitter.emit('entityUpdated', this.id);
             return;
         }
 
-        // Knockback victim
+        // --- Victim‑Knockback: attacker hits another entity ---
         const victimId = Object.keys(players).find(pid =>
             players[pid].position.x === tx && players[pid].position.y === ty
         );
-        if (!victimId) return;
-
-        const victim = players[victimId];
-        const px = victim.position.x + dx * 3, py = victim.position.y + dy * 3;
-        if (px >= 0 && px < physicsEngine.gridSize && py >= 0 && py < physicsEngine.gridSize) {
-            if (gameMode && fires.some(f => f.x === px && f.y === py)) {
+        if (victimId) {
+            const victim = players[victimId];
+            const { position, died } = physicsEngine.computeVictimKnockback(
+                victim.position, vec, fires
+            );
+            if (died && victim.isAlive) {
                 victim.isAlive = false;
+                eventEmitter.emit('playerDied', victimId);
             } else {
-                victim.position = { x: px, y: py };
+                victim.position = position;
             }
-        } else {
-            let bx = victim.position.x - dx * 3, by = victim.position.y - dy * 3;
-            bx = Math.max(0, Math.min(physicsEngine.gridSize - 1, bx));
-            by = Math.max(0, Math.min(physicsEngine.gridSize - 1, by));
-            if (gameMode && fires.some(f => f.x === bx && f.y === by)) {
-                victim.isAlive = false;
-            } else {
-                victim.position = { x: bx, y: by };
-            }
+            eventEmitter.emit('entityUpdated', victimId);
         }
 
-        // Punch animation state
+        // --- Punch animation ---
         players[this.id].isPunching = true;
-        players[this.id].punchDirection = { dx, dy };
-        io.emit('updateState', { players, fires });
+        players[this.id].punchDirection = vec;
+        eventEmitter.emit('entityUpdated', this.id);
+
         setTimeout(() => {
             if (players[this.id]) {
                 players[this.id].isPunching = false;
                 players[this.id].punchDirection = { dx: 0, dy: 0 };
-                io.emit('updateState', { players, fires });
+                eventEmitter.emit('entityUpdated', this.id);
             }
         }, 100);
     }

@@ -1,4 +1,5 @@
-// physicsEngine.js
+// physics/PhysicsEngine.js
+
 class PhysicsEngine {
     /**
      * Constructs a PhysicsEngine instance.
@@ -12,11 +13,11 @@ class PhysicsEngine {
 
     /**
      * Bounce a position so that it stays inside the grid.
-     * @param {object} position - The position to bounce { x, y }.
-     * @returns {object} The new position inside grid boundaries.
+     * @param {{x:number,y:number}} pos
+     * @returns {{x:number,y:number}}
      */
-    bouncePosition(position) {
-        let { x, y } = position;
+    bouncePosition(pos) {
+        let { x, y } = pos;
         if (x < 0) {
             x = 1;
         } else if (x >= this.gridSize) {
@@ -32,22 +33,22 @@ class PhysicsEngine {
 
     /**
      * Checks if a cell is already occupied by a player.
-     * @param {object} cell - The cell to check { x, y }.
+     * @param {{x:number,y:number}} cell
      * @param {string|null} exceptId - (Optional) An id to ignore in the check.
-     * @returns {boolean} True if the cell is occupied.
+     * @returns {boolean}
      */
     isCellOccupied(cell, exceptId = null) {
-        return Object.keys(this.players).some(pid => {
-            if (pid === exceptId) return false;
-            const pos = this.players[pid].position;
-            return pos.x === cell.x && pos.y === cell.y;
-        });
+        return Object.keys(this.players).some(pid =>
+            pid !== exceptId &&
+            this.players[pid].position.x === cell.x &&
+            this.players[pid].position.y === cell.y
+        );
     }
 
     /**
-     * Finds a safe spawn location where no fire is too near and the cell is unoccupied.
-     * @param {Array<object>} fires - Array of fire cells.
-     * @returns {object|null} A valid spawn location { x, y } or null if none found.
+     * Finds a safe spawn location far from any fire and unoccupied.
+     * @param {Array<{x:number,y:number}>} fires
+     * @returns {{x:number,y:number}|null}
      */
     findSafeSpawnLocation(fires) {
         const maxAttempts = 100;
@@ -64,6 +65,61 @@ class PhysicsEngine {
             }
         }
         return null;
+    }
+
+    /**
+     * Compute knockback when attacker hits a wall:
+     *  - push back by 3 cells opposite direction
+     *  - clamp inside grid
+     *  - if lands on fire → died
+     * @param {{x:number,y:number}} startPos
+     * @param {{dx:number,dy:number}} dir
+     * @param {Array<{x:number,y:number}>} fires
+     * @returns {{position:{x:number,y:number},died:boolean}}
+     */
+    computeSelfKnockback(startPos, dir, fires) {
+        const { dx, dy } = dir;
+        let tx = startPos.x - dx * 3;
+        let ty = startPos.y - dy * 3;
+
+        // clamp inside bounds
+        tx = Math.max(0, Math.min(this.gridSize - 1, tx));
+        ty = Math.max(0, Math.min(this.gridSize - 1, ty));
+
+        // died if landing in fire
+        const died = fires.some(f => f.x === tx && f.y === ty);
+        return { position: { x: tx, y: ty }, died };
+    }
+
+    /**
+     * Compute knockback for a victim:
+     *  - push forward by 3 cells in punch direction
+     *  - if out-of-bounds, bounce back opposite
+     *  - clamp inside grid
+     *  - if lands on fire → died
+     * @param {{x:number,y:number}} startPos
+     * @param {{dx:number,dy:number}} dir
+     * @param {Array<{x:number,y:number}>} fires
+     * @returns {{position:{x:number,y:number},died:boolean}}
+     */
+    computeVictimKnockback(startPos, dir, fires) {
+        const { dx, dy } = dir;
+        let tx = startPos.x + dx * 3;
+        let ty = startPos.y + dy * 3;
+
+        // bounce back if out of bounds
+        if (tx < 0 || tx >= this.gridSize || ty < 0 || ty >= this.gridSize) {
+            tx = startPos.x - dx * 3;
+            ty = startPos.y - dy * 3;
+        }
+
+        // clamp inside
+        tx = Math.max(0, Math.min(this.gridSize - 1, tx));
+        ty = Math.max(0, Math.min(this.gridSize - 1, ty));
+
+        // died if landing in fire
+        const died = fires.some(f => f.x === tx && f.y === ty);
+        return { position: { x: tx, y: ty }, died };
     }
 }
 

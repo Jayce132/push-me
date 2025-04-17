@@ -1,10 +1,34 @@
+// game/FireManager.js
+const EventEmitter = require('events');
+
 class FireManager {
-    constructor(gridSize, players, io) {
+    /**
+     * @param {number} gridSize
+     * @param {Object<string,Player>} players
+     * @param {SocketServer} io
+     * @param {EventEmitter} eventEmitter
+     */
+    constructor(gridSize, players, io, eventEmitter) {
         this.gridSize = gridSize;
         this.players = players;
         this.io = io;
-        this.fires = [this.randomFire()];
+        this.eventEmitter = eventEmitter;
+
+        // initial fire(s)
+        this.fires = [ this.randomFire() ];
         this.interval = null;
+
+        // listen for ghosts extinguishing fires
+        this.eventEmitter.on('extinguishFire', ({ x, y }) => {
+            // remove that fire if still present
+            this.fires = this.fires.filter(f => f.x !== x || f.y !== y);
+            this.io.emit('updateState', { players: this.players, fires: this.fires });
+
+            // if no fires remain, tell the GameServer
+            if (this.fires.length === 0) {
+                this.eventEmitter.emit('firesCleared');
+            }
+        });
     }
 
     randomFire() {
@@ -22,41 +46,30 @@ class FireManager {
         return Object.values(this.players).filter(p => !p.isBot).length;
     }
 
-    startFireInterval(callbackOnLastHuman) {
+    startFireInterval() {
         if (this.interval) return;
-
-        const humanCount = this.getEffectiveHumanCount();
-        if (humanCount === 0) {
+        if (this.getEffectiveHumanCount() === 0) {
             console.log("FireManager: No humans at start — aborting fire.");
             return;
         }
 
         this.interval = setInterval(() => {
-            const count = this.getEffectiveHumanCount();
-            if (count === 0) {
+            if (this.getEffectiveHumanCount() === 0) {
                 console.log("FireManager: Humans left — stopping fire.");
-                this.shutdown();
-                return;
+                return this.shutdown();
             }
 
             this.spread();
-            this.io.emit('updateState', { players: this.players, fires: this.fires });
-
-            const alive = Object.values(this.players).filter(p => !p.isBot && p.isAlive);
-            if (alive.length <= 1) {
-                callbackOnLastHuman();
-            }
+            this.io.emit('updateState', {
+                players: this.players,
+                fires: this.fires
+            });
         }, 3000);
     }
 
     spread() {
-        if (this.getEffectiveHumanCount() === 0) {
-            console.log("FireManager: Skipped spreading — no human players.");
-            return;
-        }
-
         console.log("FireManager: Fire is spreading...");
-        const newFires = [...this.fires];
+        const newFires = [ ...this.fires ];
 
         for (const fire of this.fires) {
             for (const [dx, dy] of [[0,1],[1,0],[0,-1],[-1,0]]) {
@@ -71,15 +84,16 @@ class FireManager {
                 ) {
                     newFires.push({ x: newX, y: newY });
 
+                    // kill any player standing there
                     for (const pid in this.players) {
-                        const player = this.players[pid];
-                        if (player.position.x === newX && player.position.y === newY) {
-                            if (!player.isBot) {
-                                player.isAlive = false;
-                            } else {
-                                this.io.to(pid).emit('gameOver', { socketId: pid });
-                                delete this.players[pid];
-                            }
+                        const p = this.players[pid];
+                        if (!p.isBot &&
+                            p.position.x === newX &&
+                            p.position.y === newY &&
+                            p.isAlive) {
+
+                            p.isAlive = false;
+                            this.eventEmitter.emit('playerDied', pid);
                         }
                     }
                 }
@@ -95,12 +109,18 @@ class FireManager {
             this.interval = null;
         }
         this.fires = [];
-        this.io.emit('updateState', { players: this.players, fires: this.fires });
+        this.io.emit('updateState', {
+            players: this.players,
+            fires: this.fires
+        });
     }
 
     reset() {
-        this.fires = [this.randomFire()];
-        this.io.emit('updateState', { players: this.players, fires: this.fires });
+        this.fires = [ this.randomFire() ];
+        this.io.emit('updateState', {
+            players: this.players,
+            fires: this.fires
+        });
     }
 }
 

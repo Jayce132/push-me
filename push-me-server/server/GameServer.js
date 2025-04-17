@@ -1,8 +1,9 @@
-// GameServer.js
+// game/GameServer.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const EventEmitter = require('events');
 
 const PhysicsEngine = require('../game/PhysicsEngine');
 const Player = require('../game/Player');
@@ -16,17 +17,68 @@ class GameServer {
         this.botSkin = config.botSkin;
         this.players = {};
 
+        // shared event bus
+        this.eventEmitter = new EventEmitter();
+
         this.app = express();
         this.server = http.createServer(this.app);
         this.io = new Server(this.server, {
-            cors: { origin: "http://localhost:5173", methods: ["GET", "POST"] }
+            cors: { origin: "http://localhost:5173", methods: ["GET","POST"] }
         });
 
         this.physicsEngine = new PhysicsEngine(this.gridSize, this.players);
-        this.fireManager = new FireManager(this.gridSize, this.players, this.io);
+        this.fireManager = new FireManager(
+            this.gridSize,
+            this.players,
+            this.io,
+            this.eventEmitter
+        );
 
+        this._bindEvents();
         this.setupMiddleware();
         this.setupSocketEvents();
+    }
+
+    _bindEvents() {
+        // broadcast any time an entity changes
+        this.eventEmitter.on('entityUpdated', () => {
+            this.io.emit('updateState', {
+                players: this.players,
+                fires: this.fireManager.getFires()
+            });
+        });
+
+        // react to player death (last‑man‑standing)
+        this.eventEmitter.on('playerDied', () => this._checkEndOfRound());
+
+        // react to all fires being extinguished
+        this.eventEmitter.on('firesCleared', () => {
+            console.log("Game: All fires extinguished; switching to lobby...");
+            for (const pid in this.players) {
+                const p = this.players[pid];
+                if (!p.isBot) {
+                    this.io.to(pid).emit('switchLobby', { lobbyUrl: 'http://localhost:3001' });
+                    p.isAlive = true;
+                }
+            }
+            this.fireManager.reset();
+        });
+    }
+
+    _checkEndOfRound() {
+        const alive = Object.values(this.players)
+            .filter(p => !p.isBot && p.isAlive);
+
+        if (alive.length <= 1) {
+            console.log("Game: One or zero humans left; switching all to lobby...");
+            for (const pid in this.players) {
+                const p = this.players[pid];
+                if (!p.isBot) {
+                    this.io.to(pid).emit('switchLobby', { lobbyUrl: 'http://localhost:3001' });
+                    p.isAlive = true;
+                }
+            }
+        }
     }
 
     setupMiddleware() {
@@ -34,14 +86,14 @@ class GameServer {
     }
 
     setupSocketEvents() {
-        this.io.on('connection', (socket) => {
+        this.io.on('connection', socket => {
             console.log(`Game: Player connected: ${socket.id}`);
-
             if (socket.id.startsWith("bot-")) {
                 socket.disconnect(true);
                 return;
             }
 
+            // start or reset fires if none
             if (this.fireManager.getFires().length === 0) {
                 this.fireManager.reset();
             }
@@ -54,55 +106,52 @@ class GameServer {
                 return;
             }
 
+            // choose a free skin
             const usedSkins = Object.values(this.players)
                 .filter(p => !p.isBot)
                 .map(p => p.skin);
-            const skin = this.availableSkins.find(s => !usedSkins.includes(s)) || this.availableSkins[0];
+            const skin = this.availableSkins.find(s => !usedSkins.includes(s))
+                || this.availableSkins[0];
 
+            // pass emitter (and physicsEngine) into player
             const gameContext = {
                 players: this.players,
-                io: this.io,
                 gridSize: this.gridSize,
                 physicsEngine: this.physicsEngine,
-                botSkin: this.botSkin
+                botSkin: this.botSkin,
+                eventEmitter: this.eventEmitter
             };
 
-            this.players[socket.id] = new Player(socket.id, spawnLocation, skin, gameContext);
+            this.players[socket.id] = new Player(
+                socket.id,
+                spawnLocation,
+                skin,
+                gameContext
+            );
 
-            this.fireManager.startFireInterval(() => {
-                console.log("Game: One or zero humans left; switching all to lobby...");
-                for (const pid in this.players) {
-                    if (!this.players[pid].isBot) {
-                        this.io.to(pid).emit('switchLobby', { lobbyUrl: 'http://localhost:3001' });
-                        this.players[pid].isAlive = true;
-                    }
-                }
-            });
+            this.fireManager.startFireInterval();
 
             socket.emit('initializeGame', { gridSize: this.gridSize });
             socket.emit('updateState', { players: this.players, fires });
 
-            socket.on('playerMove', (move) => {
-                if (this.players[socket.id]) {
-                    this.players[socket.id].move(move, this.fireManager.getFires());
-                }
+            socket.on('playerMove', move => {
+                this.players[socket.id]?.move(move, this.fireManager.getFires());
             });
 
-            socket.on('playerPunch', (dir) => {
-                if (this.players[socket.id]) {
-                    this.players[socket.id].punch(dir, this.fireManager.getFires());
-                }
+            socket.on('playerPunch', dir => {
+                this.players[socket.id]?.punch(dir, this.fireManager.getFires());
             });
 
             socket.on('disconnect', () => {
                 delete this.players[socket.id];
+                this._checkEndOfRound();
 
                 const humanCount = Object.values(this.players).filter(p => !p.isBot).length;
-
                 if (humanCount === 0) {
                     this.resetGrid();
                     this.fireManager.shutdown();
                 } else {
+                    // send full update after disconnect
                     this.io.emit('updateState', {
                         players: this.players,
                         fires: this.fireManager.getFires()
