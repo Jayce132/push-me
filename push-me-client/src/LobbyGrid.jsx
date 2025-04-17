@@ -1,10 +1,7 @@
-// LobbyGrid.jsx
 import React, { useEffect, useState } from 'react';
 import { Player } from './Player.jsx';
-import { Ghost } from './Ghost';
-import { Fire } from './Fire';
 import { PlayerList } from './PlayerList';
-import { Wall } from './Wall'; // reuse your Wall component
+import { Wall } from './Wall';
 import { io } from 'socket.io-client';
 import { Bot } from './Bot.jsx';
 
@@ -29,38 +26,40 @@ export const LobbyGrid = ({ setInLobby }) => {
     const [gameState, setGameState] = useState({ players: {}, fires: [] });
     const [socket, setSocket] = useState(null);
     const [gridSize, setGridSize] = useState(20);
+    const [humanCount, setHumanCount] = useState(0);
+    const [readyCount, setReadyCount] = useState(0);
     const cellSize = 32;
     const innerGridWidth = gridSize * cellSize;
     const innerGridHeight = gridSize * cellSize;
     const outerWidth = innerGridWidth + 2 * cellSize;
     const outerHeight = innerGridHeight + 2 * cellSize;
-    const [humanCount, setHumanCount] = useState(0);
 
     useEffect(() => {
         const socket = io('http://localhost:3001');
         setSocket(socket);
 
-        socket.on('connect', () => {
-            // Optionally save socket.id if needed.
-        });
         socket.on('initializeGame', (data) => {
             setGridSize(data.gridSize);
         });
+
         socket.on('updateState', (updatedGameState) => {
             setGameState(updatedGameState);
-            // Count the effective human players (exclude bots).
-            const keys = Object.keys(updatedGameState.players);
-            const count = keys.filter((pid) => !updatedGameState.players[pid].isBot).length;
-            setHumanCount(count);
+            const allHumans = Object.keys(updatedGameState.players).filter(pid => !updatedGameState.players[pid].isBot);
+            setHumanCount(allHumans.length);
         });
+
+        socket.on('updateReadyCount', (count) => {
+            setReadyCount(count);
+        });
+
         socket.on('noSafeSpawn', () => {
             console.warn('No safe spawn available in the lobby.');
         });
-        // Listen for the "switchGame" event which tells the client to switch to game mode.
+
         socket.on('switchGame', (data) => {
-            console.log("Switching to game at", data.gameUrl);
             setInLobby(false);
         });
+
         return () => {
             socket.disconnect();
         };
@@ -75,7 +74,6 @@ export const LobbyGrid = ({ setInLobby }) => {
     };
 
     const startGame = () => {
-        // Emit the startGame event to the server.
         socket.emit('startGame');
     };
 
@@ -112,6 +110,7 @@ export const LobbyGrid = ({ setInLobby }) => {
             >
                 <h3>Lobby</h3>
                 <p>Humans in lobby: {humanCount}</p>
+                <p>Ready: {readyCount} / {humanCount}</p>
                 <button onClick={startGame}>Start Game</button>
             </div>
 
@@ -161,6 +160,8 @@ export const LobbyGrid = ({ setInLobby }) => {
                                     onPunch={handlePlayerPunch}
                                     isCurrentPlayer={playerId === (socket ? socket.id : null)}
                                     skin={p.skin}
+                                    isPunching={p.isPunching || false}
+                                    punchDirection={p.punchDirection || { dx: 0, dy: 0 }}
                                 />
                             );
                         }

@@ -1,9 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-export const Player = ({ position, onMove, onPunch, cellSize, isCurrentPlayer, skin }) => {
+export const Player = ({
+                           position,
+                           onMove,
+                           onPunch,
+                           cellSize,
+                           isCurrentPlayer,
+                           skin,
+                           isPunching,
+                           punchDirection
+                       }) => {
     const keysPressed = useRef({});
     const [lastDirection, setLastDirection] = useState({ dx: 0, dy: -1 });
-    const [isPunching, setIsPunching] = useState(false);
+    const [localPunching, setLocalPunching] = useState(false);
 
     const pixelTop = position.x * cellSize;
     const pixelLeft = position.y * cellSize;
@@ -13,10 +22,11 @@ export const Player = ({ position, onMove, onPunch, cellSize, isCurrentPlayer, s
 
         const handleKeyDown = (e) => {
             if (e.key === ' ') {
-                e.preventDefault(); // prevent scrolling
-                setIsPunching(true);
-                onPunch(lastDirection);
-                setTimeout(() => setIsPunching(false), 100);
+                e.preventDefault();
+                // Show local punch, because the server only shows it when it hits something
+                setLocalPunching(true);
+                setTimeout(() => setLocalPunching(false), 100);
+                onPunch(lastDirection); // Let server handle real logic
                 return;
             }
             keysPressed.current[e.key] = true;
@@ -48,6 +58,8 @@ export const Player = ({ position, onMove, onPunch, cellSize, isCurrentPlayer, s
         };
     }, [onMove, onPunch, isCurrentPlayer, lastDirection]);
 
+    const shouldShowPunch = localPunching || isPunching;
+
     return (
         <div
             style={{
@@ -65,12 +77,12 @@ export const Player = ({ position, onMove, onPunch, cellSize, isCurrentPlayer, s
             }}
         >
             <span role="img" aria-label="player">{skin}</span>
-            {isPunching && (
+            {shouldShowPunch && (
                 <div
                     style={{
                         position: 'absolute',
-                        top: `${lastDirection.dx * cellSize}px`,
-                        left: `${lastDirection.dy * cellSize}px`,
+                        top: `${(isPunching ? punchDirection.dx : lastDirection.dx) * cellSize}px`,
+                        left: `${(isPunching ? punchDirection.dy : lastDirection.dy) * cellSize}px`,
                         width: `${cellSize}px`,
                         height: `${cellSize}px`,
                         display: 'flex',
