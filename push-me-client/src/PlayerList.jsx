@@ -1,30 +1,21 @@
-import React from 'react';
+export const PlayerList = ({ players, currentUser, currentSocketId }) => {
+    const sorted = Object.entries(players).sort(([, a], [, b]) => (b.score ?? 0) - (a.score ?? 0));
 
-export const PlayerList = ({ players, currentSocketId }) => {
-    const playerIds = Object.keys(players);
     return (
         <div className="player-list">
             <h3>Connected Players</h3>
-            <ul style={{ listStyleType: 'none', padding: 0 }}>
-                {playerIds.map((playerId) => {
-                    const player = players[playerId];
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {sorted.map(([pid, p]) => {
+                    const isYou = p.skin === currentUser.skin;
+                    const emoji = p.isAlive === false ? '👻' : p.skin;
+                    const status = p.isAlive === false ? '(ghost)' : '';
                     return (
-                        <li
-                            key={playerId}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                marginBottom: '4px',
-                                color: player.isAlive === false ? 'red' : 'white'
-                            }}
-                        >
-              <span style={{ marginRight: '8px', fontSize: '1.5rem' }}>
-                {player.skin || '😭'}
-              </span>
+                        <li key={pid} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ fontSize: '1.5rem', marginRight: 8 }}>{emoji}</span>
                             <span>
-                {playerId} {playerId === currentSocketId ? "(you)" : ""}{" "}
-                                {player.isAlive === false && "(ghost)"}
-              </span>
+                                {isYou && '(you) '}
+                                {status} Score: {p.score ?? 0}
+                            </span>
                         </li>
                     );
                 })}

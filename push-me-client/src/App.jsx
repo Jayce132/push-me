@@ -1,21 +1,19 @@
-import React, {useState} from 'react';
-import LobbyGrid from './LobbyGrid.jsx';
-import GameGrid from './GameGrid.jsx';
+import React, { useState } from 'react';
+import { LobbyGrid } from './grids/LobbyGrid.jsx';
+import { ArenaGrid } from './grids/ArenaGrid.jsx';
+import useSession from './hooks/useSession.js';
 
 export const App = () => {
-    const [isLobby, setInLobby] = useState(true);
-    const [playerId, setPlayerId] = useState(null);
+    // now stores { skin: string|null, score: number }
+    const [user, setUser] = useSession('currentUser', { skin: null, score: 0 });
+    const [isLobby, setIsLobby] = useState(true);
 
     return (
         <>
             {isLobby ? (
-                <LobbyGrid
-                    setInLobby={setInLobby}
-                    setPlayerId={setPlayerId}
-                    playerId={playerId}
-                />
+                <LobbyGrid user={user} setUser={setUser} setInLobby={setIsLobby} />
             ) : (
-                <GameGrid setInLobby={setInLobby} playerId={playerId}/>
+                <ArenaGrid user={user} setUser={setUser} setInLobby={setIsLobby} />
             )}
         </>
     );

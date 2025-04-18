@@ -1,4 +1,3 @@
-// game/LobbyServer.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -6,168 +5,87 @@ const cors = require('cors');
 const EventEmitter = require('events');
 
 const PhysicsEngine = require('../game/PhysicsEngine');
-const Player = require('../game/Player');
-const Bot = require('../game/Bot');
+const {
+    assignSkinAndScore,
+    createPlayer,
+    bindEntityUpdate,
+    serializePlayers
+} = require('./utils/sharedGame');
 
 class LobbyServer {
-    constructor(port = 3001, config) {
+    constructor(port = 3001, { gridSize, availableSkins }) {
         this.port = port;
-
-        // shared event bus for all punching/movement events
-        this.eventEmitter = new EventEmitter();
-
-        // Extract constants from config
-        this.gridSize = config.gridSize;
-        this.availableSkins = config.availableSkins;
-        this.botSkin = config.botSkin;
+        this.gridSize = gridSize;
+        this.availableSkins = availableSkins;
         this.players = {};
 
+        this.eventEmitter = new EventEmitter();
+        this.physicsEngine = new PhysicsEngine(this.gridSize, this.players);
+
         this.app = express();
+        this.app.use(cors());
         this.server = http.createServer(this.app);
         this.io = new Server(this.server, {
-            cors: {
-                origin: "http://localhost:5173",
-                methods: ["GET", "POST"]
-            }
+            cors: { origin: "http://localhost:5173", methods: ["GET", "POST"] }
         });
 
-        this.fires = [];
-        this.physicsEngine = new PhysicsEngine(this.gridSize, this.players);
-        this.readyPlayers = new Set();
-
-        this._bindEvents();
-        this.setupMiddleware();
-        this.setupSocketEvents();
+        bindEntityUpdate(this.eventEmitter, this.io, 'lobbyEntityUpdated', this.players);
+        this._setupSockets();
     }
 
-    _bindEvents() {
-        // whenever any entity moves, punches, dies or extinguishes fire,
-        // broadcast the updated state to everyone in the lobby
-        this.eventEmitter.on('entityUpdated', () => {
-            this.io.emit('updateState', {
-                players: this.players,
-                fires: this.fires
-            });
-        });
-    }
-
-    setupMiddleware() {
-        this.app.use(cors());
-    }
-
-    setupSocketEvents() {
+    _setupSockets() {
         this.io.on('connection', socket => {
-            console.log(`Lobby: Player connected: ${socket.id}`);
+            console.log(`Lobby: ${socket.id} connected`);
 
-            const spawnLocation = this.physicsEngine.findSafeSpawnLocation(this.fires);
-            if (!spawnLocation) {
-                socket.emit('noSafeSpawn');
-                socket.disconnect(true);
-                return;
+            const usedSkins = new Set(Object.values(this.players).map(p => p.skin));
+            const assigned = assignSkinAndScore(socket.handshake.query, this.availableSkins, usedSkins);
+
+            if (!assigned) {
+                socket.emit('noSkinAvailable', { message: 'All skins in use.' });
+                return socket.disconnect(true);
             }
 
-            const usedSkins = Object.values(this.players)
-                .filter(p => !p.isBot)
-                .map(p => p.skin);
-            const skin = this.availableSkins.find(s => !usedSkins.includes(s))
-                || this.availableSkins[0];
-
-            // build context with eventEmitter instead of io
-            const gameContext = {
+            const spawn = this.physicsEngine.findSafeSpawnLocation([]);
+            const context = {
                 players: this.players,
                 gridSize: this.gridSize,
                 physicsEngine: this.physicsEngine,
-                botSkin: this.botSkin,
                 eventEmitter: this.eventEmitter
             };
 
-            // create a new Player (which under the hood uses PunchingEntity)
-            this.players[socket.id] = new Player(
-                socket.id,
-                spawnLocation,
-                skin,
-                gameContext
-            );
+            this.players[socket.id] = createPlayer(socket.id, spawn, assigned.skin, assigned.score, context);
 
-            // initial state push
-            socket.emit('initializeGame', { gridSize: this.gridSize });
-            socket.emit('updateState', { players: this.players, fires: this.fires });
+            socket.emit('initializeLobby', { gridSize: this.gridSize });
+            socket.emit('lobbyEntityUpdated', { players: serializePlayers(this.players) });
 
-            // delegate moves & punches to Player; updates will come via entityUpdated
-            socket.on('playerMove', move => {
-                this.players[socket.id]?.move(move, this.fires);
+            socket.on('lobbyPlayerMove', move => {
+                this.players[socket.id]?.move(move, []);
             });
 
-            socket.on('playerPunch', dir => {
-                this.players[socket.id]?.punch(dir, this.fires);
+            socket.on('lobbyPlayerPunch', dir => {
+                this.players[socket.id]?.punch(dir, []);
             });
 
-            socket.on('startGame', () => {
-                this.readyPlayers.add(socket.id);
-                this.io.emit('updateReadyCount', this.readyPlayers.size);
-
-                const humanSocketIds = Object.keys(this.players)
-                    .filter(pid => !this.players[pid].isBot);
-
-                if (this.readyPlayers.size === humanSocketIds.length) {
-                    humanSocketIds.forEach(id => {
-                        this.io.to(id).emit('switchGame', { gameUrl: 'http://localhost:3000' });
+            socket.on('startArena', () => {
+                for (const [id, p] of Object.entries(this.players)) {
+                    this.io.to(id).emit('switchToArena', {
+                        skin: p.skin,
+                        score: p.score
                     });
-                    this.readyPlayers.clear();
-                    this.io.emit('updateReadyCount', 0);
                 }
             });
 
             socket.on('disconnect', () => {
+                console.log(`Lobby: ${socket.id} disconnected`);
                 delete this.players[socket.id];
-                this.io.emit('updateState', { players: this.players, fires: this.fires });
-
-                // clean up bots/humans if nobody left
-                const humanCount = Object.values(this.players)
-                    .filter(p => !p.isBot).length;
-                if (humanCount === 0) {
-                    Object.keys(this.players).forEach(pid => delete this.players[pid]);
-                    this.io.emit('updateState', { players: this.players, fires: this.fires });
-                }
+                this.io.emit('lobbyEntityUpdated', { players: serializePlayers(this.players) });
             });
-
-            // ensure at least one bot in lobby
-            const humanCount = Object.values(this.players)
-                .filter(p => !p.isBot).length;
-            const botExists = Object.values(this.players)
-                .some(p => p.isBot);
-            if (humanCount > 0 && !botExists) {
-                this.spawnBot();
-            }
         });
-    }
-
-    spawnBot() {
-        const botId = "bot-" + Date.now();
-        const spawnLocation = this.physicsEngine.findSafeSpawnLocation(this.fires);
-        if (!spawnLocation) return;
-
-        const gameContext = {
-            players: this.players,
-            gridSize: this.gridSize,
-            physicsEngine: this.physicsEngine,
-            botSkin: this.botSkin,
-            eventEmitter: this.eventEmitter
-        };
-
-        const bot = new Bot(botId, spawnLocation, gameContext);
-        this.players[botId] = bot;
-
-        // initial update for everyone
-        this.io.emit('updateState', { players: this.players, fires: this.fires });
-
-        // drive the bot’s AI
-        setInterval(() => bot.update(), 250);
     }
 
     start() {
         this.server.listen(this.port, () => {
-            console.log(`Lobby server running on port ${this.port}`);
+            console.log(`Lobby server listening on port ${this.port}`);
         });
     }
 }
