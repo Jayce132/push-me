@@ -1,12 +1,12 @@
 // server/ArenaServer.js
-const express       = require('express');
-const http          = require('http');
-const { Server }    = require('socket.io');
-const cors          = require('cors');
-const EventEmitter  = require('events');
+const express = require('express');
+const http = require('http');
+const {Server} = require('socket.io');
+const cors = require('cors');
+const EventEmitter = require('events');
 
 const PhysicsEngine = require('../game/PhysicsEngine');
-const FireManager   = require('../game/FireManager');
+const FireManager = require('../game/FireManager');
 const {
     assignArenaPlayerFromLobby,
     createPlayer,
@@ -14,21 +14,21 @@ const {
 } = require('./utils/sharedGame');
 
 class ArenaServer {
-    constructor(port = 3000, { gridSize, availableSkins }) {
-        this.port           = port;
-        this.gridSize       = gridSize;
+    constructor(port = 3000, {gridSize, availableSkins}) {
+        this.port = port;
+        this.gridSize = gridSize;
         this.availableSkins = availableSkins;
-        this.players        = {};
+        this.players = {};
 
-        this.eventEmitter   = new EventEmitter();
-        this.physicsEngine  = new PhysicsEngine(this.gridSize, this.players);
+        this.eventEmitter = new EventEmitter();
+        this.physicsEngine = new PhysicsEngine(this.gridSize, this.players);
 
         // express + socket.io
-        this.app    = express();
+        this.app = express();
         this.app.use(cors());
         this.server = http.createServer(this.app);
-        this.io     = new Server(this.server, {
-            cors: { origin: "http://localhost:5173", methods: ["GET","POST"] }
+        this.io = new Server(this.server, {
+            cors: {origin: "http://localhost:5173", methods: ["GET", "POST"]}
         });
 
         // fire manager
@@ -43,7 +43,7 @@ class ArenaServer {
         this.eventEmitter.on('entityUpdated', () => {
             this.io.emit('updateArenaState', {
                 players: serializePlayers(this.players),
-                fires:   this.fireManager.getFires()
+                fires: this.fireManager.getFires()
             });
         });
 
@@ -85,23 +85,31 @@ class ArenaServer {
         const allHumans = Object.values(this.players)
             .filter(p => !p.isBot);
         const totalHumans = allHumans.length;
-        const survivor = allHumans.find(p => p.isAlive);
+        // who’s still alive?
+        const survivors = allHumans.filter(p => p.isAlive);
 
-        if (survivor) {
-            // award bonus: number of opponents
+        if (survivors.length > 1) {
+            // multiple survivors: give everybody 1 point
+            survivors.forEach(p => {
+                p.score = (p.score || 0) + 1;
+            });
+            console.log(`Arena: All survivors awarded 1 point`);
+        } else if (survivors.length === 1) {
+            // exactly one survivor: bonus = total opponents
             const bonus = totalHumans - 1;
-            survivor.score = (survivor.score || 0) + bonus;
-            console.log(`Arena: survivor ${survivor.skin} awarded ${bonus} points`);
+            survivors[0].score = (survivors[0].score || 0) + bonus;
+            console.log(
+                `Arena: survivor ${survivors[0].skin} awarded ${bonus} points`
+            );
         }
-
         // broadcast updated scores + fires=0
         this.eventEmitter.emit('entityUpdated');
 
         // send everyone back
         console.log("Arena: Round over → sending everyone back to lobby");
-        for (const [id,p] of Object.entries(this.players)) {
+        for (const [id, p] of Object.entries(this.players)) {
             this.io.to(id).emit('switchToLobby', {
-                skin:  p.skin,
+                skin: p.skin,
                 score: p.score
             });
         }
@@ -119,14 +127,14 @@ class ArenaServer {
                 this.availableSkins
             );
             if (!assigned) {
-                socket.emit('noSkinAvailable', { message: 'Missing or invalid player data.' });
+                socket.emit('noSkinAvailable', {message: 'Missing or invalid player data.'});
                 return socket.disconnect(true);
             }
 
             // no duplicate skins
             const used = new Set(Object.values(this.players).map(p => p.skin));
             if (used.has(assigned.skin)) {
-                socket.emit('noSkinAvailable', { message: 'This skin is already in the arena.' });
+                socket.emit('noSkinAvailable', {message: 'This skin is already in the arena.'});
                 return socket.disconnect(true);
             }
 
@@ -140,10 +148,10 @@ class ArenaServer {
             }
 
             const ctx = {
-                players:       this.players,
-                gridSize:      this.gridSize,
+                players: this.players,
+                gridSize: this.gridSize,
                 physicsEngine: this.physicsEngine,
-                eventEmitter:  this.eventEmitter
+                eventEmitter: this.eventEmitter
             };
             this.players[socket.id] = createPlayer(
                 socket.id, spawn, assigned.skin, assigned.score, ctx
@@ -153,17 +161,17 @@ class ArenaServer {
             this.fireManager.startFireInterval();
 
             // handshake + initial state
-            socket.emit('initializeArena', { gridSize: this.gridSize });
+            socket.emit('initializeArena', {gridSize: this.gridSize});
             this.eventEmitter.emit('entityUpdated');
 
             // client inputs
-            socket.on('arenaPlayerMove',  m => this.players[socket.id]?.move(m, this.fireManager.getFires()));
+            socket.on('arenaPlayerMove', m => this.players[socket.id]?.move(m, this.fireManager.getFires()));
             socket.on('arenaPlayerPunch', d => this.players[socket.id]?.punch(d, this.fireManager.getFires()));
 
             socket.on('exitArenaAll', () => {
-                for (const [id,p] of Object.entries(this.players)) {
+                for (const [id, p] of Object.entries(this.players)) {
                     this.io.to(id).emit('switchToLobby', {
-                        skin:  p.skin,
+                        skin: p.skin,
                         score: p.score
                     });
                 }

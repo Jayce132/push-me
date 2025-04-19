@@ -1,25 +1,19 @@
-const EventEmitter = require('events');
+// game/FireManager.js
+const Fire = require('./Fire');
 
 class FireManager {
-    /**
-     * @param {number} gridSize
-     * @param {Object<string,Player>} players
-     * @param {SocketServer} io
-     * @param {EventEmitter} eventEmitter
-     */
     constructor(gridSize, players, io, eventEmitter) {
-        this.gridSize     = gridSize;
-        this.players      = players;
-        this.io           = io;
+        this.gridSize = gridSize;
+        this.players = players;
+        this.io = io;
         this.eventEmitter = eventEmitter;
 
-        // initial fire(s)
-        this.fires    = [ this.randomFire() ];
+        // start with one Fire instance
+        this.fires = [this._makeRandomFire()];
         this.interval = null;
 
-        // ghosts extinguish fires
-        this.eventEmitter.on('extinguishFire', ({ x, y }) => {
-            this.fires = this.fires.filter(f => f.x !== x || f.y !== y);
+        this.eventEmitter.on('extinguishFire', ({x, y}) => {
+            this.fires = this.fires.filter(f => !(f.x === x && f.y === y));
             this.eventEmitter.emit('entityUpdated');
             if (this.fires.length === 0) {
                 this.eventEmitter.emit('firesCleared');
@@ -27,15 +21,17 @@ class FireManager {
         });
     }
 
-    randomFire() {
-        return {
+    _makeRandomFire() {
+        const pos = {
             x: Math.floor(Math.random() * this.gridSize),
             y: Math.floor(Math.random() * this.gridSize)
         };
+        return new Fire(pos, this.gridSize, this.players, this.eventEmitter);
     }
 
     getFires() {
-        return this.fires;
+        // return plain objects for serialization
+        return this.fires.map(f => f.toJSON());
     }
 
     getEffectiveHumanCount() {
@@ -43,70 +39,51 @@ class FireManager {
     }
 
     startFireInterval() {
+
         if (this.interval) return;
+
+        // if nobody’s here, bail
         if (this.getEffectiveHumanCount() === 0) {
             console.log("FireManager: No humans at start — aborting fire.");
             return;
         }
 
-        // if we've been shutdown or it's a re‑entry, repopulate a fresh fire
         if (this.fires.length === 0) {
             console.log("FireManager: resetting initial fire for new round");
-            this.fires = [ this.randomFire() ];
-            this.eventEmitter.emit('entityUpdated');
+            this.reset();
         }
 
         this.interval = setInterval(() => {
             if (this.getEffectiveHumanCount() === 0) {
-                console.log("FireManager: Humans left — stopping fire.");
                 return this.shutdown();
             }
 
-            this.spread();
+            this._spreadAll();
             this.eventEmitter.emit('entityUpdated');
         }, 3000);
     }
 
-    spread() {
-        console.log("FireManager: Fire is spreading...");
-        const newFires = [ ...this.fires ];
-        for (const fire of this.fires) {
-            for (const [dx, dy] of [[0,1],[1,0],[0,-1],[-1,0]]) {
-                const nx = fire.x + dx, ny = fire.y + dy;
-                if (
-                    Math.random() > 0.5 &&
-                    !newFires.some(f => f.x === nx && f.y === ny) &&
-                    nx >= 0 && ny >= 0 &&
-                    nx < this.gridSize && ny < this.gridSize
-                ) {
-                    newFires.push({ x: nx, y: ny });
+    _spreadAll() {
+        // track occupied keys so two Fires don't double‑spawn the same cell
+        const occupied = new Set(this.fires.map(f => `${f.x},${f.y}`));
+        const newFires = [];
 
-                    // kill any standing human
-                    for (const pid in this.players) {
-                        const p = this.players[pid];
-                        if (!p.isBot && p.position.x === nx && p.position.y === ny && p.isAlive) {
-                            p.isAlive = false;
-                            this.eventEmitter.emit('playerDied', pid);
-                        }
-                    }
-                }
-            }
+        for (const fire of this.fires) {
+            newFires.push(...fire.spread(occupied));
         }
-        this.fires = newFires;
+
+        this.fires = this.fires.concat(newFires);
     }
 
     shutdown() {
-        if (this.interval) {
-            clearInterval(this.interval);
-            this.interval = null;
-        }
+        clearInterval(this.interval);
+        this.interval = null;
         this.fires = [];
         this.eventEmitter.emit('entityUpdated');
     }
 
     reset() {
-        // repopulate a single fire
-        this.fires = [ this.randomFire() ];
+        this.fires = [this._makeRandomFire()];
         this.eventEmitter.emit('entityUpdated');
     }
 }
