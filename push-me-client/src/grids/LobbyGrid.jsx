@@ -1,12 +1,12 @@
 import React from 'react';
 import Cell from '../game/Cell.jsx';
-import { Wall } from '../game/Wall.jsx';
-import { PlayerList } from '../PlayerList.jsx';
-import { Player } from '../game/Player.jsx';
-import { useGameSocket } from '../hooks/useGameSocket.js';
-import { useGridDimensions } from "../hooks/useGridDimensions.js";
+import {Wall} from '../game/Wall.jsx';
+import {PlayerList} from '../PlayerList.jsx';
+import {Player} from '../game/Player.jsx';
+import {useGameSocket} from '../hooks/useGameSocket.js';
+import {useGridDimensions} from "../hooks/useGridDimensions.js";
 
-export const LobbyGrid = ({ user, setUser, setInLobby }) => {
+export const LobbyGrid = ({user, setUser, setInLobby}) => {
     const {
         socket,
         gameState: lobbyState,
@@ -21,7 +21,7 @@ export const LobbyGrid = ({ user, setUser, setInLobby }) => {
         switchEvent: 'switchToArena'
     });
 
-    const { innerWidth, innerHeight, outerWidth, outerHeight, cellSize } =
+    const {innerWidth, innerHeight, outerWidth, outerHeight, cellSize} =
         useGridDimensions(gridSize);
 
     const startArena = () => {
@@ -29,14 +29,20 @@ export const LobbyGrid = ({ user, setUser, setInLobby }) => {
     };
 
     return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100vw', height: '100vh' }}>
-            <div style={{ width: '20%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100vw', height: '100vh'}}>
+            <div style={{
+                width: '20%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center'
+            }}>
                 <h3>Lobby</h3>
                 <button onClick={startArena}>Start Arena</button>
             </div>
 
-            <div style={{ position: 'relative', width: outerWidth, height: outerHeight }}>
-                <Wall gridSize={gridSize} cellSize={cellSize} />
+            <div style={{position: 'relative', width: outerWidth, height: outerHeight}}>
+                <Wall gridSize={gridSize} cellSize={cellSize}/>
                 <div style={{
                     position: 'absolute',
                     top: cellSize,
@@ -47,10 +53,10 @@ export const LobbyGrid = ({ user, setUser, setInLobby }) => {
                     gridTemplateColumns: `repeat(${gridSize}, ${cellSize}px)`,
                     gridTemplateRows: `repeat(${gridSize}, ${cellSize}px)`
                 }}>
-                    {Array.from({ length: gridSize * gridSize }).map((_, i) => {
+                    {Array.from({length: gridSize * gridSize}).map((_, i) => {
                         const x = i % gridSize;
                         const y = Math.floor(i / gridSize);
-                        return <Cell key={`${x}-${y}`} x={x} y={y} cellSize={cellSize} />;
+                        return <Cell key={`${x}-${y}`} x={x} y={y} cellSize={cellSize}/>;
                     })}
                     {Object.entries(lobbyState.players).map(([pid, p]) => (
                         <Player
@@ -63,12 +69,20 @@ export const LobbyGrid = ({ user, setUser, setInLobby }) => {
                             skin={p.skin}
                             isPunching={p.isPunching}
                             punchDirection={p.punchDirection}
+                            isKnockedBack={p.isKnockedBack}
+                            lastDirection={p.lastDirection}
                         />
                     ))}
                 </div>
             </div>
 
-            <div style={{ width: '20%', display: 'flex', flexDirection: 'column', alignItems: 'center', overflowY: 'auto' }}>
+            <div style={{
+                width: '20%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                overflowY: 'auto'
+            }}>
                 <PlayerList
                     players={lobbyState.players}
                     currentUser={user}

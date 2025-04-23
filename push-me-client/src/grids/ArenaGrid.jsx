@@ -68,6 +68,8 @@ export const ArenaGrid = ({ user, setUser, setInLobby }) => {
                                 onPunch={d => socket.emit('arenaPlayerPunch', d)}
                                 cellSize={cellSize}
                                 isCurrentPlayer={isYou}
+                                isKnockedBack={p.isKnockedBack}
+                                lastDirection={p.lastDirection}
                             />
                             : <Player
                                 key={pid}
@@ -79,6 +81,8 @@ export const ArenaGrid = ({ user, setUser, setInLobby }) => {
                                 skin={p.skin}
                                 isPunching={p.isPunching}
                                 punchDirection={p.punchDirection}
+                                isKnockedBack={p.isKnockedBack}
+                                lastDirection={p.lastDirection}
                             />;
                     })}
 

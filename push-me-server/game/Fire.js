@@ -7,23 +7,51 @@ class Fire {
      * @param {EventEmitter} eventEmitter
      */
     constructor(pos, gridSize, players, eventEmitter) {
-        this.x = pos.x;
-        this.y = pos.y;
-        this.gridSize = gridSize;
-        this.players = players;
+        this.x            = pos.x;
+        this.y            = pos.y;
+        this.gridSize     = gridSize;
+        this.players      = players;
         this.eventEmitter = eventEmitter;
     }
 
+    toJSON() {
+        return { x: this.x, y: this.y };
+    }
+
     /**
-     * Look at four neighbors; for each one we randomly
-     * decide to light it, then immediately kill any
-     * player standing there (via their die()).
-     *
-     * @param {Set<string>} occupied  — set of "x,y" strings to avoid duplicates
-     * @returns {Fire[]}  newly created fires
+     * Called when any entity steps/moves into this fire cell.
+     * Non-bots die immediately.
+     */
+    movedInto(entity) {
+        if (!entity.isBot && entity.isAlive) {
+            entity.die();
+        }
+    }
+
+    /**
+     * Called when someone punches into this fire cell.
+     * Only *dead* entities (ghosts) may extinguish.
+     */
+    punchedBy(attacker, vec) {
+        // `attacker.isAlive === false` means “ghost”
+        if (!attacker.isAlive) {
+            this.eventEmitter.emit('extinguishFire', { x: this.x, y: this.y });
+        }
+    }
+
+    /**
+     * Called when a victim is knocked into this cell.
+     * Same effect as walking into fire.
+     */
+    knockedInto(entity, vec) {
+        this.movedInto(entity);
+    }
+
+    /**
+     *  Fire‐spreading logic
      */
     spread(occupied) {
-        const deltas = [ [0,1], [1,0], [0,-1], [-1,0] ];
+        const deltas = [ [0,1],[1,0],[0,-1],[-1,0] ];
         const newFires = [];
 
         for (const [dx,dy] of deltas) {
@@ -36,28 +64,21 @@ class Fire {
                 nx < this.gridSize && ny < this.gridSize &&
                 !occupied.has(key)
             ) {
-                // occupy that cell
                 occupied.add(key);
                 const fire = new Fire({ x: nx, y: ny }, this.gridSize, this.players, this.eventEmitter);
                 newFires.push(fire);
 
-                // immediately kill any player standing here
+                // kill any standing human
                 for (const pid in this.players) {
                     const p = this.players[pid];
                     if (!p.isBot && p.isAlive && p.position.x === nx && p.position.y === ny) {
-                        p.die();                     // calls playerDied → ArenaServer re‑emits entityUpdated
+                        p.die(); // emits playerDied → ArenaServer will re-emit entityUpdated
                     }
                 }
             }
         }
 
-        console.log("Fire is spreading...")
-
         return newFires;
-    }
-
-    toJSON() {
-        return { x: this.x, y: this.y };
     }
 }
 

@@ -21,7 +21,6 @@ class ArenaServer {
         this.players = {};
 
         this.eventEmitter = new EventEmitter();
-        this.physicsEngine = new PhysicsEngine(this.gridSize, this.players);
 
         // express + socket.io
         this.app = express();
@@ -37,6 +36,12 @@ class ArenaServer {
             this.players,
             this.io,
             this.eventEmitter
+        );
+
+        this.physicsEngine = new PhysicsEngine(
+            this.gridSize,
+            this.players,
+            this.fireManager
         );
 
         // broadcast any change

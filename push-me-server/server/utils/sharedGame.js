@@ -9,7 +9,9 @@ function serializePlayers(players) {
             score:          p.score,
             isAlive:        p.isAlive,
             isPunching:     p.isPunching,
-            punchDirection: p.punchDirection
+            punchDirection: p.punchDirection,
+            isKnockedBack:  p.isKnockedBack || false,
+            lastDirection:  p.lastDirection || { dx: 0, dy: -1 },
         };
     }
     return out;
