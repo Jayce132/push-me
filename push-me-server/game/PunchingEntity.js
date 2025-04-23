@@ -1,5 +1,5 @@
+// game/PunchingEntity.js
 const EventEmitter = require('events');
-const Fire         = require('./Fire');       // to detect fire cells
 
 class PunchingEntity {
     /**
@@ -21,7 +21,7 @@ class PunchingEntity {
 
     toJSON() {
         return {
-            id:             this.id,
+            id,
             position:       this.position,
             skin:           this.skin,
             lastDirection:  this.lastDirection,
@@ -35,6 +35,7 @@ class PunchingEntity {
 
     /**
      * Move in the given direction (or repeat lastDirection).
+     * Always delegates to the cell for collision/bounce.
      */
     move(dir) {
         const { physicsEngine, eventEmitter } = this.gameContext;
@@ -51,24 +52,15 @@ class PunchingEntity {
         const other = physicsEngine.getEntityAt({ x: tx, y: ty });
         if (other && other.id !== this.id) return;
 
-        // find the target cell
+        // delegate to the target cell (Empty, Fire, or Wall)
         const cell = physicsEngine.getCell({ x: tx, y: ty });
-
-        // if I'm a ghost, let me pass through fires
-        if (!this.isAlive && cell instanceof Fire) {
-            this.position = { x: tx, y: ty };
-            eventEmitter.emit('entityUpdated', this.id);
-            return;
-        }
-
-        // otherwise delegate to whatever cell it is
         cell.movedInto(this, vec);
     }
 
     /**
      * Punch in a direction (or lastDirection):
-     *  1) cell reaction (always)
-     *  2) player knock-back (only if alive)
+     *  1) let the cell react (knockback/extinguish)
+     *  2) let any victim react (only if alive)
      *  3) animate
      */
     punch(dir) {
@@ -77,14 +69,14 @@ class PunchingEntity {
             ? dir
             : this.lastDirection;
 
-        // 1) always trigger the cell logic (extinguish, bounce, etc.)
-        const targetCell = physicsEngine.getCell({
+        // 1) cell reaction (e.g. bounce off walls, extinguish fire)
+        const cell = physicsEngine.getCell({
             x: this.position.x + vec.dx,
             y: this.position.y + vec.dy
         });
-        targetCell.punchedBy(this, vec);
+        cell.punchedBy(this, vec);
 
-        // 2) only living entities can knock others back
+        // 2) entity reaction (only if this attacker entity is alive)
         if (this.isAlive) {
             const victim = physicsEngine.getEntityAt({
                 x: this.position.x + vec.dx,
@@ -93,10 +85,10 @@ class PunchingEntity {
             if (victim) victim.punchedBy(vec);
         }
 
-        // 3) animate your own punch
-        this.lastDirection  = vec;
-        this.isPunching     = true;
-        this.punchDirection = vec;
+        // 3) punch animation on self
+        this.lastDirection   = vec;
+        this.isPunching      = true;
+        this.punchDirection  = vec;
         eventEmitter.emit('entityUpdated', this.id);
 
         setTimeout(() => {
@@ -110,30 +102,26 @@ class PunchingEntity {
 
     /**
      * Knockback when *you* get punched by someone else.
-     * Ghosts still get knocked back visually, but their isAlive=false
-     * means they can pass through fire on any subsequent move().
      */
     punchedBy(vec) {
         const { physicsEngine, eventEmitter } = this.gameContext;
 
-        // start the knockback animation
+        // start knockback animation
         this.isKnockedBack = true;
         eventEmitter.emit('entityUpdated', this.id);
 
-        // compute the knockback destination (and if you died there)
+        // compute bounce / death
         const { position: newPos, died } =
             physicsEngine.computeVictimKnockback(this.position, vec);
 
-        // always move you (ghost or live) to that newPos
+        // move there
         this.position = newPos;
         eventEmitter.emit('entityUpdated', this.id);
 
-        // if you died, flip isAlive after moving
-        if (died) {
-            this.die();
-        }
+        // if died, mark dead
+        if (died) this.die();
 
-        // clear the knockback flag in ~100ms
+        // clear knockback flag
         setTimeout(() => {
             if (physicsEngine.players[this.id]) {
                 this.isKnockedBack = false;
@@ -142,6 +130,9 @@ class PunchingEntity {
         }, 100);
     }
 
+    /**
+     * Mark this entity dead.
+     */
     die() {
         if (!this.isAlive) return;
         this.isAlive = false;

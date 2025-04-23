@@ -1,90 +1,79 @@
-import React, { useEffect, useRef, useState } from 'react';
+// components/Ghost.jsx
+import React from 'react';
+import { usePlayerControls } from '../hooks/usePlayerControls.js';
+import { AimIndicator }      from './AimIndicator.jsx';
+import { PunchIndicator }    from './PunchIndicator.jsx';
 
-export const Ghost = ({ position, onMove, onPunch, cellSize, isCurrentPlayer }) => {
-    const keysPressed = useRef({});
-    const [lastDirection, setLastDirection] = useState({ dx: 0, dy: -1 });
-    const [isPunching, setIsPunching] = useState(false);
+export const Ghost = ({
+                          position,
+                          onMove,
+                          onPunch,
+                          cellSize,
+                          isCurrentPlayer,
+                          isKnockedBack,            // server‐sent flag
+                          lastDirection: serverLastDirection
+                      }) => {
+    // Pull in aim/punch state
+    const {
+        aimDirection,          // where to point the faint icon
+        indicatorDistance,
+        shouldShowPunch,       // true while holding space locally
+        localPunchDirection    // captured local direction at space press
+    } = usePlayerControls({
+        isCurrentPlayer,
+        onMove,
+        onPunch,
+        serverLastDirection,
+        cellSize
+    });
 
-    const pixelTop = position.x * cellSize;
-    const pixelLeft = position.y * cellSize;
+    // Decide what to render
+    const showAim   = !shouldShowPunch;
+    const showPunch = shouldShowPunch && localPunchDirection && (
+        localPunchDirection.dx !== 0 || localPunchDirection.dy !== 0
+    );
 
-    useEffect(() => {
-        if (!isCurrentPlayer) return;
-
-        const handleKeyDown = (e) => {
-            if (e.key === ' ') {
-                e.preventDefault();
-                setIsPunching(true);
-                // Even ghost punches are sent to the server.
-                onPunch(lastDirection);
-                setTimeout(() => setIsPunching(false), 100);
-                return;
-            }
-            keysPressed.current[e.key] = true;
-        };
-
-        const handleKeyUp = (e) => {
-            delete keysPressed.current[e.key];
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-
-        const intervalId = setInterval(() => {
-            let dx = 0, dy = 0;
-            if (keysPressed.current['w']) dx -= 1;
-            if (keysPressed.current['s']) dx += 1;
-            if (keysPressed.current['a']) dy -= 1;
-            if (keysPressed.current['d']) dy += 1;
-            if (dx !== 0 || dy !== 0) {
-                onMove({ dx, dy });
-                setLastDirection({ dx, dy });
-            }
-        }, 75);
-
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-            clearInterval(intervalId);
-        };
-    }, [onMove, onPunch, isCurrentPlayer, lastDirection]);
+    const topPx  = position.x * cellSize;
+    const leftPx = position.y * cellSize;
 
     return (
-        <div
-            style={{
-                position: 'absolute',
-                top: `${pixelTop}px`,
-                left: `${pixelLeft}px`,
-                width: `${cellSize}px`,
-                height: `${cellSize}px`,
-                transition: 'top 0.1s ease, left 0.1s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: `${cellSize}px`,
-                zIndex: 10,
-            }}
-        >
-            {/* Ghost always shows the ghost emoji */}
+        <div style={{
+            position:   'absolute',
+            top:        `${topPx}px`,
+            left:       `${leftPx}px`,
+            width:      `${cellSize}px`,
+            height:     `${cellSize}px`,
+            transition: 'top 0.1s ease, left 0.1s ease, transform 0.1s ease',
+            transform:  isKnockedBack ? 'scale(3)' : 'scale(1)',
+            display:       'flex',
+            alignItems:    'center',
+            justifyContent:'center',
+            fontSize:      `${cellSize}px`,
+            zIndex:        10,
+        }}>
+            {/* 1) faint ghost‐aim indicator */}
+            {showAim && (
+                <AimIndicator
+                    aimDirection={aimDirection}
+                    indicatorDistance={indicatorDistance}
+                    cellSize={cellSize}
+                    emoji="💧"
+                    opacity={0.3}
+                />
+            )}
+
+            {/* 2) ghost icon */}
             <span role="img" aria-label="ghost">👻</span>
-            {isPunching && (
-                <div
-                    style={{
-                        position: 'absolute',
-                        top: `${lastDirection.dx * cellSize}px`,
-                        left: `${lastDirection.dy * cellSize}px`,
-                        width: `${cellSize}px`,
-                        height: `${cellSize}px`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        pointerEvents: 'none',
-                    }}
-                >
-                    {/* Use droplet for ghost punch animation */}
-                    <span role="img" aria-label="ghost punch">💧</span>
-                </div>
+
+            {/* 3) full‐cell ghost punch */}
+            {showPunch && (
+                <PunchIndicator
+                    direction={localPunchDirection}
+                    cellSize={cellSize}
+                    emoji="💧"
+                />
             )}
         </div>
     );
 };
+
