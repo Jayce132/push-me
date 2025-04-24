@@ -9,27 +9,28 @@ class PunchingEntity {
      * @param {{ physicsEngine: PhysicsEngine, eventEmitter: EventEmitter }} gameContext
      */
     constructor(id, position, skin, gameContext) {
-        this.id            = id;
-        this.position      = position;
-        this.skin          = skin;
-        this.lastDirection = { dx: 0, dy: -1 };
-        this.isAlive       = true;
-        this.isBot         = false;
+        this.id = id;
+        this.position = position;
+        this.skin = skin;
+        this.lastDirection = {dx: 0, dy: -1};
+        this.isAlive = true;
+        this.isBot = false;
         this.isKnockedBack = false;
-        this.gameContext   = gameContext;
+        this.gameContext = gameContext;
+        this.lastPunchTime = 0;
     }
 
     toJSON() {
         return {
             id,
-            position:       this.position,
-            skin:           this.skin,
-            lastDirection:  this.lastDirection,
-            isAlive:        this.isAlive,
-            isBot:          this.isBot,
-            isPunching:     this.isPunching  || false,
-            punchDirection: this.punchDirection || { dx: 0, dy: 0 },
-            isKnockedBack:  this.isKnockedBack
+            position: this.position,
+            skin: this.skin,
+            lastDirection: this.lastDirection,
+            isAlive: this.isAlive,
+            isBot: this.isBot,
+            isPunching: this.isPunching || false,
+            punchDirection: this.punchDirection || {dx: 0, dy: 0},
+            isKnockedBack: this.isKnockedBack
         };
     }
 
@@ -38,7 +39,7 @@ class PunchingEntity {
      * Always delegates to the cell for collision/bounce.
      */
     move(dir) {
-        const { physicsEngine, eventEmitter } = this.gameContext;
+        const {physicsEngine, eventEmitter} = this.gameContext;
 
         // pick a vector
         const vec = (dir && typeof dir.dx === 'number')
@@ -49,11 +50,11 @@ class PunchingEntity {
         const ty = this.position.y + vec.dy;
 
         // block if another live player is there
-        const other = physicsEngine.getEntityAt({ x: tx, y: ty });
+        const other = physicsEngine.getEntityAt({x: tx, y: ty});
         if (other && other.id !== this.id) return;
 
         // delegate to the target cell (Empty, Fire, or Wall)
-        const cell = physicsEngine.getCell({ x: tx, y: ty });
+        const cell = physicsEngine.getCell({x: tx, y: ty});
         cell.movedInto(this, vec);
     }
 
@@ -64,37 +65,50 @@ class PunchingEntity {
      *  3) animate
      */
     punch(dir) {
-        const { physicsEngine, eventEmitter } = this.gameContext;
+        const {physicsEngine, eventEmitter} = this.gameContext;
         const vec = (dir && typeof dir.dx === 'number')
             ? dir
             : this.lastDirection;
 
-        // 1) cell reaction (e.g. bounce off walls, extinguish fire)
+        //  ─── compute punch‐power ───
+        const now = Date.now();
+        const basePower = 3;
+        // if it’s been ≥3 000 ms since last punch, give +3 bonus
+        const bonus = (now - this.lastPunchTime >= 3000) ? 3 : 0;
+        const power = basePower + bonus;
+        this.lastPunchTime = now;
+
+        // remember where _you_ are aiming BEFORE you bounce yourself
+        const originX = this.position.x;
+        const originY = this.position.y;
+
+        // 1) cell reaction (now with variable power)
         const cell = physicsEngine.getCell({
             x: this.position.x + vec.dx,
             y: this.position.y + vec.dy
         });
-        cell.punchedBy(this, vec);
+        // only walls use variable power for now
+        cell.punchedBy(this, vec, power);
 
         // 2) entity reaction (only if this attacker entity is alive)
         if (this.isAlive) {
             const victim = physicsEngine.getEntityAt({
-                x: this.position.x + vec.dx,
-                y: this.position.y + vec.dy
+                x: originX + vec.dx,
+                y: originY + vec.dy
             });
-            if (victim) victim.punchedBy(vec);
+            if (victim) victim.punchedBy(vec, power);
         }
 
         // 3) punch animation on self
-        this.lastDirection   = vec;
-        this.isPunching      = true;
-        this.punchDirection  = vec;
+        this.lastDirection = vec;
+        this.isPunching = true;
+        this.punchDirection = vec;
         eventEmitter.emit('entityUpdated', this.id);
 
         setTimeout(() => {
             if (physicsEngine.players[this.id]) {
-                this.isPunching     = false;
-                this.punchDirection = { dx: 0, dy: 0 };
+                this.isPunching = false;
+                this.punchDirection = {dx: 0, dy: 0};
                 eventEmitter.emit('entityUpdated', this.id);
             }
         }, 100);
@@ -102,17 +116,19 @@ class PunchingEntity {
 
     /**
      * Knockback when *you* get punched by someone else.
+     * @param {{dx:number,dy:number}} vec
+     * @param {number} [power=3]  how many cells to knock back
      */
-    punchedBy(vec) {
-        const { physicsEngine, eventEmitter } = this.gameContext;
+    punchedBy(vec, power = 3) {
+        const {physicsEngine, eventEmitter} = this.gameContext;
 
         // start knockback animation
         this.isKnockedBack = true;
         eventEmitter.emit('entityUpdated', this.id);
 
         // compute bounce / death
-        const { position: newPos, died } =
-            physicsEngine.computeVictimKnockback(this.position, vec);
+        const {position: newPos, died} =
+            physicsEngine.computeVictimKnockback(this.position, vec, power);
 
         // move there
         this.position = newPos;

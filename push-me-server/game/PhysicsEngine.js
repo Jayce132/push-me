@@ -1,8 +1,8 @@
 // game/PhysicsEngine.js
 
 const EmptyCell = require("./EmptyCell");
-const Fire      = require("./Fire");
-const Wall      = require("./Wall");
+const Fire = require("./Fire");
+const Wall = require("./Wall");
 
 class PhysicsEngine {
     /**
@@ -11,8 +11,8 @@ class PhysicsEngine {
      * @param {FireManager|null} fireManager
      */
     constructor(gridSize, players, fireManager = null) {
-        this.gridSize   = gridSize;
-        this.players    = players;
+        this.gridSize = gridSize;
+        this.players = players;
         this.fireManager = fireManager;
     }
 
@@ -22,12 +22,12 @@ class PhysicsEngine {
      * @returns {{x:number,y:number}}
      */
     bouncePosition(pos) {
-        let { x, y } = pos;
-        if (x < 0)         x = 1;
+        let {x, y} = pos;
+        if (x < 0) x = 1;
         else if (x >= this.gridSize) x = this.gridSize - 2;
-        if (y < 0)         y = 1;
+        if (y < 0) y = 1;
         else if (y >= this.gridSize) y = this.gridSize - 2;
-        return { x, y };
+        return {x, y};
     }
 
     /**
@@ -55,63 +55,71 @@ class PhysicsEngine {
             const x = Math.floor(Math.random() * this.gridSize);
             const y = Math.floor(Math.random() * this.gridSize);
             const safe = fires.every(f => Math.abs(x - f.x) + Math.abs(y - f.y) >= 3);
-            if (safe && !this.isCellOccupied({ x, y })) {
-                return { x, y };
+            if (safe && !this.isCellOccupied({x, y})) {
+                return {x, y};
             }
         }
         return null;
     }
 
     /**
-     * When you punch a wall, you knock yourself back.
-     * @param {{x:number,y:number}} startPos
-     * @param {{dx:number,dy:number}} dir
-     * @returns {{position:{x:number,y:number},died:boolean}}
+     * Core knockback helper:
+     *  - raw = start + dir * power
+     *  - clamp raw → boundary point
+     *  - overshoot = |raw – boundary|
+     *  - final = boundary – dir * overshoot
+     *  - clamp final, check death
      */
-    computeSelfKnockback(startPos, dir) {
-        // get current fires
+    _computeKnockBack(startPos, dir, power) {
         const fires = this.fireManager ? this.fireManager.getFires() : [];
         const { dx, dy } = dir;
-        let tx = startPos.x - dx * 3;
-        let ty = startPos.y - dy * 3;
 
-        tx = Math.max(0, Math.min(this.gridSize - 1, tx));
-        ty = Math.max(0, Math.min(this.gridSize - 1, ty));
+        // 1) raw target
+        const rawX = startPos.x + dx * power;
+        const rawY = startPos.y + dy * power;
 
-        const died = fires.some(f => f.x === tx && f.y === ty);
-        return { position: { x: tx, y: ty }, died };
+        // 2) clamp into bounds
+        const boundX = Math.max(0, Math.min(this.gridSize - 1, rawX));
+        const boundY = Math.max(0, Math.min(this.gridSize - 1, rawY));
+
+        // 3) overshoot per axis
+        const overX = Math.abs(rawX - boundX);
+        const overY = Math.abs(rawY - boundY);
+
+        // 4) bounce back leftover
+        let finalX = boundX - dx * overX;
+        let finalY = boundY - dy * overY;
+
+        // 5) clamp again & fire-death
+        finalX = Math.max(0, Math.min(this.gridSize - 1, finalX));
+        finalY = Math.max(0, Math.min(this.gridSize - 1, finalY));
+        const died = fires.some(f => f.x === finalX && f.y === finalY);
+
+        return { position: { x: finalX, y: finalY }, died };
+    }
+
+
+    /**
+     * Self-knockback: bounce _backwards_ with the same bounce logic.
+     */
+    computeSelfKnockback(startPos, dir, power = 3) {
+        const rev = { dx: -dir.dx, dy: -dir.dy };
+        return this._computeKnockBack(startPos, rev, power);
     }
 
     /**
-     * When another entity punches you, you get knocked forward (or bounce back).
-     * @param {{x:number,y:number}} startPos
-     * @param {{dx:number,dy:number}} dir
-     * @returns {{position:{x:number,y:number},died:boolean}}
+     * Victim-knockback: bounce _forward_, but if you hit a wall you
+     * only bounce back the _leftover_ steps.
      */
-    computeVictimKnockback(startPos, dir) {
-        const fires = this.fireManager ? this.fireManager.getFires() : [];
-        const { dx, dy } = dir;
-        let tx = startPos.x + dx * 3;
-        let ty = startPos.y + dy * 3;
-
-        // if out‐of‐bounds, bounce back instead
-        if (tx < 0 || tx >= this.gridSize || ty < 0 || ty >= this.gridSize) {
-            tx = startPos.x - dx * 3;
-            ty = startPos.y - dy * 3;
-        }
-
-        tx = Math.max(0, Math.min(this.gridSize - 1, tx));
-        ty = Math.max(0, Math.min(this.gridSize - 1, ty));
-
-        const died = fires.some(f => f.x === tx && f.y === ty);
-        return { position: { x: tx, y: ty }, died };
+    computeVictimKnockback(startPos, dir, power = 3) {
+        return this._computeKnockBack(startPos, dir, power);
     }
 
     /**
      * Find a player entity at these coords, or null.
      * @param {{x:number,y:number}} pos
      */
-    getEntityAt({ x, y }) {
+    getEntityAt({x, y}) {
         return Object.values(this.players).find(p =>
             p.position.x === x && p.position.y === y
         ) || null;
@@ -123,19 +131,19 @@ class PhysicsEngine {
      * - Fire if fireManager says there’s a flame
      * - otherwise an EmptyCell
      */
-    getCell({ x, y }) {
+    getCell({x, y}) {
         if (x < 0 || y < 0 || x >= this.gridSize || y >= this.gridSize) {
-            return new Wall({ x, y }, this);
+            return new Wall({x, y}, this);
         }
 
         if (
             this.fireManager &&
             this.fireManager.getFires().some(f => f.x === x && f.y === y)
         ) {
-            return new Fire({ x, y }, this.gridSize, this.players, this.fireManager.eventEmitter);
+            return new Fire({x, y}, this.gridSize, this.players, this.fireManager.eventEmitter);
         }
 
-        return new EmptyCell({ x, y }, this);
+        return new EmptyCell({x, y}, this);
     }
 }
 
