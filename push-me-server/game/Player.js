@@ -16,8 +16,8 @@ class Player extends PunchingEntity {
     }
 
     /**
-     * Move override so ghosts can walk through fire tiles.
-     * Alive players still collide normally via super.move().
+     * Override so that ghosts pass through *fire* as well.
+     * Walls and empty cells still use the base logic (via super.move).
      */
     move(dir) {
         const { physicsEngine, eventEmitter } = this.gameContext;
@@ -25,21 +25,21 @@ class Player extends PunchingEntity {
         const tx  = this.position.x + vec.dx;
         const ty  = this.position.y + vec.dy;
 
-        // 1) block if another live player is there
-        const other = physicsEngine.getEntityAt({ x: tx, y: ty });
-        if (other && other.id !== this.id) return;
-
-        // 2) if ghost, phase through Fire cells
+        // ghost path: skip fire entirely, but use base logic for walls/empty
         if (!this.isAlive) {
             const cell = physicsEngine.getCell({ x: tx, y: ty });
             if (cell instanceof Fire) {
-                // ghosts ignore fire and just move
+                // just move through the fire cell
                 this.position = { x: tx, y: ty };
-                return eventEmitter.emit('entityUpdated', this.id);
+                eventEmitter.emit('entityUpdated', this.id);
+            } else {
+                // walls and empty behave normally
+                super.move(dir);
             }
+            return;
         }
 
-        // 3) everybody else—delegate to default
+        // living players: do exactly what the base does
         super.move(dir);
     }
 

@@ -39,16 +39,33 @@ class Wall {
      * @param {number} [power=3]
      */
     punchedBy(attacker, vec, power = 3) {
-        const {physicsEngine} = attacker.gameContext;
-        // reuse computeSelfKnockback (which now grabs fires internally)
+        const {physicsEngine, eventEmitter} = attacker.gameContext;
+
+        // start self‐knockback animation
+        attacker.isKnockedBack = true;
+        eventEmitter.emit('entityUpdated', attacker.id);
+
+        // compute and apply knockback
         const {position, died} =
             physicsEngine.computeSelfKnockback(attacker.position, vec, power);
 
+        // — kill anyone you land on —
+        const bumped = physicsEngine.getEntityAt(position);
+        if (bumped && bumped.id !== attacker.id) bumped.die();
+
         attacker.position = position;
-        const {players, eventEmitter} = attacker.gameContext;
+        const {players} = attacker.gameContext;
         players[attacker.id].position = position;
         if (died && attacker.isAlive) attacker.die();
         eventEmitter.emit('entityUpdated', attacker.id);
+
+        // clear the knockback animation after 100ms
+        setTimeout(() => {
+            if (physicsEngine.players[attacker.id]) {
+                attacker.isKnockedBack = false;
+                eventEmitter.emit('entityUpdated', attacker.id);
+            }
+        }, 100);
     }
 
     /**

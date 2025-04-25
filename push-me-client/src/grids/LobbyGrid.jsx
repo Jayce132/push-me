@@ -5,6 +5,7 @@ import {PlayerList} from '../PlayerList.jsx';
 import {Player} from '../game/Player.jsx';
 import {useGameSocket} from '../hooks/useGameSocket.js';
 import {useGridDimensions} from "../hooks/useGridDimensions.js";
+import {Ghost} from "../game/Ghost.jsx";
 
 export const LobbyGrid = ({user, setUser, setInLobby}) => {
     const {
@@ -58,21 +59,40 @@ export const LobbyGrid = ({user, setUser, setInLobby}) => {
                         const y = Math.floor(i / gridSize);
                         return <Cell key={`${x}-${y}`} x={x} y={y} cellSize={cellSize}/>;
                     })}
-                    {Object.entries(lobbyState.players).map(([pid, p]) => (
-                        <Player
-                            key={pid}
-                            position={p.position}
-                            cellSize={cellSize}
-                            onMove={move => socket.emit('lobbyPlayerMove', move)}
-                            onPunch={dir => socket.emit('lobbyPlayerPunch', dir)}
-                            isCurrentPlayer={pid === socket.id}
-                            skin={p.skin}
-                            isPunching={p.isPunching}
-                            punchDirection={p.punchDirection}
-                            isKnockedBack={p.isKnockedBack}
-                            lastDirection={p.lastDirection}
-                        />
-                    ))}
+                    {Object.entries(lobbyState.players).map(([pid, p]) => {
+                        const isYou = pid === socket.id;
+                        // if dead → ghost mode (no score change)
+                        if (!p.isAlive) {
+                            return (
+                                <Ghost
+                                    key={pid}
+                                    position={p.position}
+                                    cellSize={cellSize}
+                                    onMove={m => socket.emit('lobbyPlayerMove', m)}
+                                    onPunch={d => socket.emit('lobbyPlayerPunch', d)}
+                                    isCurrentPlayer={isYou}
+                                    isKnockedBack={p.isKnockedBack}
+                                    lastDirection={p.lastDirection}
+                                />
+                            );
+                        }
+                        // otherwise normal player
+                        return (
+                            <Player
+                                key={pid}
+                                position={p.position}
+                                cellSize={cellSize}
+                                onMove={move => socket.emit('lobbyPlayerMove', move)}
+                                onPunch={dir => socket.emit('lobbyPlayerPunch', dir)}
+                                isCurrentPlayer={isYou}
+                                skin={p.skin}
+                                isPunching={p.isPunching}
+                                punchDirection={p.punchDirection}
+                                isKnockedBack={p.isKnockedBack}
+                                lastDirection={p.lastDirection}
+                            />
+                        );
+                    })}
                 </div>
             </div>
 

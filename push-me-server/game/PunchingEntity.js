@@ -35,26 +35,42 @@ class PunchingEntity {
     }
 
     /**
-     * Move in the given direction (or repeat lastDirection).
-     * Always delegates to the cell for collision/bounce.
+     * Can I enter the cell (tx,ty)?
+     * - Ghosts (isAlive===false) ignore other entities
+     * - Living players only block on other *living* players
+     */
+    canEnter(tx, ty) {
+        const { physicsEngine } = this.gameContext;
+        const other = physicsEngine.getEntityAt({ x: tx, y: ty });
+
+        // ghosts phase through everybody
+        if (!this.isAlive) return true;
+
+        // living players block only on other living players
+        if (!other || other.id === this.id || !other.isAlive) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Default move: if canEnter, hand off to the cell for
+     * walls/fire/empty behavior.
      */
     move(dir) {
-        const {physicsEngine, eventEmitter} = this.gameContext;
+        const { physicsEngine } = this.gameContext;
 
-        // pick a vector
-        const vec = (dir && typeof dir.dx === 'number')
-            ? dir
-            : this.lastDirection;
+        // pick vector or default
+        const vec = (dir && typeof dir.dx === 'number') ? dir : this.lastDirection;
+        const tx  = this.position.x + vec.dx;
+        const ty  = this.position.y + vec.dy;
 
-        const tx = this.position.x + vec.dx;
-        const ty = this.position.y + vec.dy;
+        // entity-blocking check
+        if (!this.canEnter(tx, ty)) return;
 
-        // block if another live player is there
-        const other = physicsEngine.getEntityAt({x: tx, y: ty});
-        if (other && other.id !== this.id) return;
-
-        // delegate to the target cell (Empty, Fire, or Wall)
-        const cell = physicsEngine.getCell({x: tx, y: ty});
+        // then let the cell handle bounce/extinguish/etc.
+        const cell = physicsEngine.getCell({ x: tx, y: ty });
         cell.movedInto(this, vec);
     }
 
@@ -129,6 +145,12 @@ class PunchingEntity {
         // compute bounce / death
         const {position: newPos, died} =
             physicsEngine.computeVictimKnockback(this.position, vec, power);
+
+        // — kill anyone you land on… only if *you* are alive —
+        if (this.isAlive) {
+            const bumped = physicsEngine.getEntityAt(newPos);
+            if (bumped && bumped.id !== this.id) bumped.die();
+        }
 
         // move there
         this.position = newPos;
