@@ -123,6 +123,7 @@ export const LobbyGrid = ({ user, setUser, setInLobby }) => {
                                     punchDirection={p.punchDirection}
                                     isKnockedBack={p.isKnockedBack}
                                     lastDirection={p.lastDirection}
+                                    nextPunchPower={p.nextPunchPower}
                                 />
                             );
                         })}

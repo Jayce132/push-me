@@ -12,6 +12,7 @@ function serializePlayers(players) {
             punchDirection: p.punchDirection,
             isKnockedBack:  p.isKnockedBack || false,
             lastDirection:  p.lastDirection || { dx: 0, dy: -1 },
+            nextPunchPower:  p.getCurrentPunchPower()
         };
     }
     return out;

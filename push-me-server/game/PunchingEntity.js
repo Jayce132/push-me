@@ -17,21 +17,8 @@ class PunchingEntity {
         this.isBot = false;
         this.isKnockedBack = false;
         this.gameContext = gameContext;
-        this.lastPunchTime = 0;
-    }
-
-    toJSON() {
-        return {
-            id,
-            position: this.position,
-            skin: this.skin,
-            lastDirection: this.lastDirection,
-            isAlive: this.isAlive,
-            isBot: this.isBot,
-            isPunching: this.isPunching || false,
-            punchDirection: this.punchDirection || {dx: 0, dy: 0},
-            isKnockedBack: this.isKnockedBack
-        };
+        // track how many cells we've moved since the last punch
+        this.stepsSincePunch = 0;
     }
 
     /**
@@ -40,8 +27,8 @@ class PunchingEntity {
      * - Living players only block on other *living* players
      */
     canEnter(tx, ty) {
-        const { physicsEngine } = this.gameContext;
-        const other = physicsEngine.getEntityAt({ x: tx, y: ty });
+        const {physicsEngine} = this.gameContext;
+        const other = physicsEngine.getEntityAt({x: tx, y: ty});
 
         // ghosts phase through everybody
         if (!this.isAlive) return true;
@@ -59,19 +46,34 @@ class PunchingEntity {
      * walls/fire/empty behavior.
      */
     move(dir) {
-        const { physicsEngine } = this.gameContext;
+        const {physicsEngine} = this.gameContext;
 
         // pick vector or default
         const vec = (dir && typeof dir.dx === 'number') ? dir : this.lastDirection;
-        const tx  = this.position.x + vec.dx;
-        const ty  = this.position.y + vec.dy;
+        const tx = this.position.x + vec.dx;
+        const ty = this.position.y + vec.dy;
 
         // entity-blocking check
         if (!this.canEnter(tx, ty)) return;
 
         // then let the cell handle bounce/extinguish/etc.
-        const cell = physicsEngine.getCell({ x: tx, y: ty });
+        const cell = physicsEngine.getCell({x: tx, y: ty});
+        // remember old pos, then let the cell handle movement
+        const oldX = this.position.x, oldY = this.position.y;
         cell.movedInto(this, vec);
+        // if our position actually changed, count a step
+        if (this.position.x !== oldX || this.position.y !== oldY) {
+            this.stepsSincePunch++;
+        }
+    }
+
+    /**
+     +     * How strong your next punch will be:
+     +     *   base 3 + 1 per 6 steps moved (capped at +3)
+     +     */
+    getCurrentPunchPower() {
+        const bonus = Math.min(Math.floor(this.stepsSincePunch / 6), 3);
+        return 3 + bonus;
     }
 
     /**
@@ -86,13 +88,9 @@ class PunchingEntity {
             ? dir
             : this.lastDirection;
 
-        //  ─── compute punch‐power ───
-        const now = Date.now();
-        const basePower = 3;
-        // if it’s been ≥3 000 ms since last punch, give +3 bonus
-        const bonus = (now - this.lastPunchTime >= 3000) ? 3 : 0;
-        const power = basePower + bonus;
-        this.lastPunchTime = now;
+        // compute power via steps‐based helper, then reset step counter
+        const power = this.getCurrentPunchPower();
+        this.stepsSincePunch = 0;
 
         // remember where _you_ are aiming BEFORE you bounce yourself
         const originX = this.position.x;
