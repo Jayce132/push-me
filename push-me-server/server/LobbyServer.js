@@ -29,6 +29,15 @@ class LobbyServer {
             cors: { origin: "http://localhost:5173", methods: ["GET", "POST"] }
         });
 
+        this.app.get('/skins', (req, res) => {
+            // calculate which are already used:
+            const used = new Set(Object.values(this.players).map(p => p.skin));
+            // free skins = availableSkins minus used
+            const free = this.availableSkins.filter(s => !used.has(s));
+            res.json({ freeSkins: free });
+        });
+
+
         bindEntityUpdate(this.eventEmitter, this.io, 'lobbyEntityUpdated', this.players);
         this._setupSockets();
     }

@@ -1,0 +1,77 @@
+/* 0) Full‐screen vertical split, no unwanted horizontal scroll */
+.selector-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    overflow-x: hidden;      /* prevents page scrollbar */
+}
+
+/* 1) Title half: exactly viewport‐wide, hides overflow */
+.title-container {
+    flex: 1;
+    width: 100vw;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;        /* clip title overflow */
+}
+
+/* 2) Slide‐in animation on the <h1> */
+.selector-title {
+    margin: 0;
+    font-size: 20rem;
+    text-align: center;
+    transform: translateX(-100%);
+    animation: slideInTitle 3s ease-out forwards;
+}
+
+@keyframes slideInTitle {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(0); }
+}
+
+/* 3) Buttons half: viewport‐wide scroll container */
+.buttons-container {
+    flex: 1;
+    width: 100vw;
+    display: flex;
+    align-items: center;
+    overflow-x: auto;        /* ← scrollable */
+    /* hide scrollbars */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.buttons-container::-webkit-scrollbar {
+    display: none;
+}
+/* remove focus outline if you prefer */
+.buttons-container:focus {
+    outline: none;
+}
+
+/* 4) Inner flex list lays out the buttons in a row */
+.selector-list {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+}
+
+/* 5) Hover-push buttons */
+.selector-button {
+    flex: 0 0 auto;
+    font-size: 5em;
+    padding: 0.5em 1em;
+    border-radius: 8px;
+    cursor: pointer;
+    border: none;
+    transition: font-size 0.1s ease, padding 0.1s ease;
+}
+
+.selector-button:hover {
+    font-size: 6.5em;
+    padding: 0.65em 1.3em;
+}

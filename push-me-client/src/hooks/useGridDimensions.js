@@ -2,61 +2,56 @@
 import { useState, useEffect } from 'react';
 
 /**
- * Calculates cellSize so that:
- *  - all columns (plus wall cols) always fit in (1 - controlFrac)*viewportWidth
- *  - exactly half the rows (plus top wall) fit in viewportHeight
- *
- * Updates on mount and on window resize.
- *
  * @param {number} gridSize
- * @param {number} controlFrac — fraction of viewport width reserved for controls (default 0.2)
+ * @param {React.RefObject} containerRef  // the div we're filling
+ * @param {boolean} widthOnly            // if true, ignore height when sizing cells
  */
-export function useGridDimensions(gridSize, controlFrac = 0.2) {
-    // default until we calculate on mount
+export function useGridDimensions(gridSize, containerRef, widthOnly = false) {
     const [dims, setDims] = useState({
-        innerWidth: 0,
+        innerWidth:  0,
         innerHeight: 0,
-        outerWidth: 0,
+        outerWidth:  0,
         outerHeight: 0,
-        cellSize:   0
+        cellSize:    0,
     });
 
     useEffect(() => {
         const calculate = () => {
             const vh = window.innerHeight;
-            const vw = window.innerWidth;
+            const cw = containerRef.current?.clientWidth ?? window.innerWidth;
 
-            // Horizontal: need (gridSize + 2) cols to fit into (1-controlFrac)*vw
-            const mapWidth = vw * (1 - controlFrac);
-            const horizCell = mapWidth / (gridSize + 2);
+            // Horizontal cell‐size
+            const horizCell = cw / (gridSize + 2);
 
-            // Vertical: you want ceil(gridSize/2) rows + 1 wall row visible
-            const halfRows = Math.ceil(gridSize / 2);
-            const vertCell = vh / (halfRows + 1);
+            let cellSize = horizCell;
 
-            // pick the smaller, floor it to avoid fractional px overflow
-            const cellSize = Math.floor(Math.min(horizCell, vertCell));
+            if (!widthOnly) {
+                // Vertical cell‐size based on half‐rows + 1 wall
+                const halfRows = Math.ceil(gridSize / 2);
+                const vertCell = vh / (halfRows + 1);
+                cellSize = Math.min(horizCell, vertCell);
+            }
+
+            cellSize = Math.floor(cellSize);
 
             const innerW = gridSize * cellSize;
             const innerH = gridSize * cellSize;
-            const outerW = innerW + 2 * cellSize;  // left + right walls
-            const outerH = innerH + 2 * cellSize;  // top + bottom walls
+            const outerW = innerW + 2 * cellSize;
+            const outerH = innerH + 2 * cellSize;
 
             setDims({
                 innerWidth:  innerW,
                 innerHeight: innerH,
                 outerWidth:  outerW,
                 outerHeight: outerH,
-                cellSize
+                cellSize,
             });
         };
 
-        // calculate once on mount…
         calculate();
-        // …and every time the window resizes
         window.addEventListener('resize', calculate);
         return () => window.removeEventListener('resize', calculate);
-    }, [gridSize, controlFrac]);
+    }, [gridSize, containerRef, widthOnly]);
 
     return dims;
 }

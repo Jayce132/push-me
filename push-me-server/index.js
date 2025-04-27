@@ -6,7 +6,7 @@ const LobbyServer = require('./server/LobbyServer');
 const gridSize = 25;
 
 // Define available skins for human players and the bot skin.
-const availableSkins = ['😭', '😫', '😳', '😨'];
+const availableSkins = ['😂', '🤣', '😍', '😭', '😎', '😒', '😝', '😳', '🤪', '🤬', '😏', '😃', '🥺', '😨', '🥲', '🤯', '🤠', '😤', '🤥', '🤨', '🤓', '🥶', '😶‍🌫️', '🫠', '🫥', '😵‍💫', '😴', '🤡', '🤢'];
 const botSkin = '🤖';
 
 

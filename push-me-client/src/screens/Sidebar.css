@@ -1,0 +1,53 @@
+/* src/components/Sidebar.css */
+
+/* sidebar content container now full-width of its parent */
+.sidebar {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    padding: 1rem;
+}
+
+/* smaller, responsive title */
+.sidebar-title {
+    margin-bottom: 0.5em;
+    font-size: calc(1rem + 0.5vw);  /* smaller base + a little vw */
+    color: #fff;
+    text-align: center;
+}
+
+/* buttons fill the width, with a smaller font */
+.sidebar-button {
+    width: 100%;
+    font-size: calc(0.8rem + 0.5vw);
+    padding: 0.5em;
+    margin-bottom: 0.5em;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background: #444;
+    color: #fff;
+    transition: background 0.2s ease;
+}
+.sidebar-button:hover {
+    background: #555;
+}
+
+/* list entries fill, smaller font */
+.sidebar-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.5em 0;
+}
+.sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    font-size: calc(0.8rem + 0.5vw);
+    margin-bottom: 0.5em;
+    color: #eee;
+}
+.sidebar-emoji {
+    font-size: calc(1.2rem + 0.8vw);
+}

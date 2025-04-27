@@ -10,7 +10,7 @@ export const Wall = ({ gridSize, cellSize }) => {
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: `${cellSize}px`,
-        backgroundColor: 'green'
+        backgroundColor: '#242424'
     };
 
     const cells = [];

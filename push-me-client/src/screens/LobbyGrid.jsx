@@ -1,43 +1,54 @@
-import React from 'react';
-import Cell from '../game/Cell.jsx';
-import { Wall } from '../game/Wall.jsx';
-import { PlayerList } from '../PlayerList.jsx';
+// src/lobby/LobbyGrid.jsx
+import React, { useRef } from 'react';
+import Cell   from '../game/Cell.jsx';
+import { Wall }   from '../game/Wall.jsx';
 import { Player } from '../game/Player.jsx';
-import { Ghost } from '../game/Ghost.jsx';
-import { useGameSocket } from '../hooks/useGameSocket.js';
+import { Ghost }  from '../game/Ghost.jsx';
+import { useGameSocket }    from '../hooks/useGameSocket.js';
 import { useGridDimensions } from '../hooks/useGridDimensions.js';
-import { useCamera } from '../hooks/useCamera.js';
-import { LobbyControls } from './Controls.jsx';
+import { useCamera }         from '../hooks/useCamera.js';
+
+import Sidebar           from './Sidebar.jsx';
+import { LobbyControls } from '../components/Controls.jsx';
+import { PlayerList }    from '../components/PlayerList.jsx';
 
 export const LobbyGrid = ({ user, setUser, setInLobby }) => {
+    // 1) socket + lobby state
     const {
         socket,
         gameState: lobbyState,
-        gridSize
+        gridSize,
     } = useGameSocket({
         url: 'http://localhost:3001',
         user,
         setUser,
         setInLobby,
-        initEvent: 'initializeLobby',
+        initEvent:   'initializeLobby',
         updateEvent: 'lobbyEntityUpdated',
-        switchEvent: 'switchToArena'
+        switchEvent: 'switchToArena',
     });
 
-    const { innerWidth, innerHeight, outerWidth, outerHeight, cellSize } =
-        useGridDimensions(gridSize);
+    // 2) ref for the flex‐item we want to fill
+    const containerRef = useRef(null);
 
-    // our player
+    // 3) measure that width (ignore height!)
+    const {
+        innerWidth,
+        innerHeight,
+        outerWidth,
+        outerHeight,
+        cellSize,
+    } = useGridDimensions(gridSize, containerRef, /* widthOnly */ true);
+
+    // 4) camera offsets
     const me = lobbyState.players?.[socket?.id] || { position: { x: 0, y: 0 } };
-
-    // two-half camera
     const { offsetX, offsetY, transition } = useCamera({
-        position: me.position,
+        position:   me.position,
         cellSize,
         outerWidth,
         outerHeight,
         gridSize,
-        transition: 'transform 0.1s ease'
+        transition: 'transform 0.1s ease',
     });
 
     const startArena = () => socket.emit('startArena');
@@ -45,50 +56,58 @@ export const LobbyGrid = ({ user, setUser, setInLobby }) => {
     return (
         <div
             style={{
-                display: 'flex',
-                justifyContent: 'flex-start',
-                alignItems: 'flex-start',
-                width: '100vw',
-                height: '100vh',
-                overflow: 'hidden'   // no page‐scroll
+                position:   'fixed',
+                top:        0,
+                left:       0,
+                width:      '100vw',
+                height:     '100vh',
+                margin:     0,
+                padding:    0,
+                display:    'flex',
+                overflow:   'hidden',
+                background: '#242424'
             }}
         >
-            {/* camera viewport */}
+            {/* left controls sidebar */}
+            <Sidebar>
+                <LobbyControls onStart={startArena} />
+            </Sidebar>
+
+            {/* center map */}
             <div
+                ref={containerRef}
                 style={{
+                    flex:     1,
                     position: 'relative',
-                    width: outerWidth,
-                    height: '100vh',
-                    overflow: 'hidden'
+                    height:   '100vh',
+                    overflow: 'hidden',
                 }}
             >
-                {/* map: translate to either top or bottom half */}
                 <div
                     style={{
-                        position: 'absolute',
-                        width: outerWidth,
-                        height: outerHeight,
+                        position:  'absolute',
+                        width:     outerWidth,
+                        height:    outerHeight,
                         transform: `translate(${-offsetX}px, ${-offsetY}px)`,
-                        transition
+                        transition,
                     }}
                 >
                     <Wall gridSize={gridSize} cellSize={cellSize} />
 
                     <div
                         style={{
-                            position: 'absolute',
-                            top: cellSize,
-                            left: cellSize,
-                            width: innerWidth,
-                            height: innerHeight,
-                            display: 'grid',
+                            position:            'absolute',
+                            top:                 cellSize,
+                            left:                cellSize,
+                            width:               innerWidth,
+                            height:              innerHeight,
+                            display:             'grid',
                             gridTemplateColumns: `repeat(${gridSize}, ${cellSize}px)`,
-                            gridTemplateRows: `repeat(${gridSize}, ${cellSize}px)`
+                            gridTemplateRows:    `repeat(${gridSize}, ${cellSize}px)`,
                         }}
                     >
                         {Array.from({ length: gridSize * gridSize }).map((_, i) => {
-                            const x = i % gridSize;
-                            const y = Math.floor(i / gridSize);
+                            const x = i % gridSize, y = Math.floor(i / gridSize);
                             return <Cell key={`${x}-${y}`} x={x} y={y} cellSize={cellSize} />;
                         })}
 
@@ -131,24 +150,14 @@ export const LobbyGrid = ({ user, setUser, setInLobby }) => {
                 </div>
             </div>
 
-            {/* controls & player list */}
-            <div
-                style={{
-                    width: '20%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    overflowY: 'auto'
-                }}
-            >
+            {/* right player‐list sidebar */}
+            <Sidebar>
                 <PlayerList
                     players={lobbyState.players}
                     currentUser={user}
                     currentSocketId={socket?.id}
                 />
-                <LobbyControls onStart={startArena} />
-
-            </div>
+            </Sidebar>
         </div>
     );
 };
