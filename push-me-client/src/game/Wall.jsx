@@ -10,7 +10,8 @@ export const Wall = ({ gridSize, cellSize }) => {
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: `${cellSize}px`,
-        backgroundColor: '#242424'
+        backgroundImage: `url(https://www.filterforge.com/filters/10270-v3.jpg)`,
+        backgroundSize: '200%',
     };
 
     const cells = [];

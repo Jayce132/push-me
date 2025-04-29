@@ -6,8 +6,8 @@ const Cell = ({ x, y, cellSize }) => (
             gridColumnStart: y + 1,
             width: `${cellSize}px`,
             height: `${cellSize}px`,
-            border: '1px solid #242424',
-            backgroundColor: '#1a1a1a',
+            backgroundImage: `url(https://www.filterforge.com/filters/10270-v3.jpg)`,
+            backgroundSize: '200%',
         }}
     />
 );

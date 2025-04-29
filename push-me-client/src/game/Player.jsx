@@ -35,7 +35,8 @@ export const Player = ({
         ? localPunchDirection
         : (isPunching ? punchDirection : null);
 
-    const showAim = !directionToRender;
+    // only show the aim‐indicator for the current player
+    const showAim = isCurrentPlayer && !directionToRender;
     const showPunch = directionToRender && (directionToRender.dx !== 0 || directionToRender.dy !== 0);
 
     const topPx = position.x * cellSize;

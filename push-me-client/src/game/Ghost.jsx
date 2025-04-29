@@ -28,7 +28,8 @@ export const Ghost = ({
     });
 
     // Decide what to render
-    const showAim   = !shouldShowPunch;
+    // only show the aim‐indicator for the current ghost
+    const showAim   = isCurrentPlayer && !shouldShowPunch;
     const showPunch = shouldShowPunch && localPunchDirection && (
         localPunchDirection.dx !== 0 || localPunchDirection.dy !== 0
     );
