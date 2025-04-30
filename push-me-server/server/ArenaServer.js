@@ -1,4 +1,3 @@
-// server/ArenaServer.js
 const express = require('express');
 const http = require('http');
 const {Server} = require('socket.io');
@@ -50,6 +49,11 @@ class ArenaServer {
                 players: serializePlayers(this.players),
                 fires: this.fireManager.getFires()
             });
+        });
+
+        this.eventEmitter.on('playSound', payload => {
+            // broadcast sfx sound all connected sockets:
+            this.io.emit('playSound', payload);
         });
 
         // on death, maybe end the round

@@ -1,4 +1,3 @@
-// src/lobby/LobbyGrid.jsx
 import React, { useRef } from 'react';
 import Cell   from '../game/Cell.jsx';
 import { Wall }   from '../game/Wall.jsx';
@@ -8,7 +7,7 @@ import { useGameSocket }    from '../hooks/useGameSocket.js';
 import { useGridDimensions } from '../hooks/useGridDimensions.js';
 import { useCamera }         from '../hooks/useCamera.js';
 
-import Sidebar           from './Sidebar.jsx';
+import Sidebar           from '../components/Sidebar.jsx';
 import { LobbyControls } from '../components/Controls.jsx';
 import { PlayerList }    from '../components/PlayerList.jsx';
 

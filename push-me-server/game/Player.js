@@ -1,4 +1,3 @@
-// game/Player.js
 const PunchingEntity = require('./PunchingEntity');
 const Fire           = require('./Fire');
 const Wall           = require('./Wall');

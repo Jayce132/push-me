@@ -25,7 +25,7 @@
     font-size: 20rem;
     text-align: center;
     transform: translateX(-100%);
-    animation: slideInTitle 3s ease-out forwards;
+    animation: slideInTitle 1s ease-out forwards;
 }
 
 @keyframes slideInTitle {
@@ -40,19 +40,28 @@
     display: flex;
     align-items: center;
     overflow-x: auto;        /* ← scrollable */
-    /* hide scrollbars */
     -ms-overflow-style: none;
     scrollbar-width: none;
-}
-.buttons-container::-webkit-scrollbar {
-    display: none;
-}
-/* remove focus outline if you prefer */
-.buttons-container:focus {
     outline: none;
 }
 
-/* 4) Inner flex list lays out the buttons in a row */
+.buttons-container::-webkit-scrollbar {
+    display: none;
+}
+
+/* 4) Centered “no skins” message (different from .selector-button) */
+.no-skins-message {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin: 0;
+    font-size: 3rem;
+    color: #ccc;
+}
+
+/* 5) Inner flex list lays out the buttons in a row */
 .selector-list {
     display: flex;
     align-items: center;
@@ -60,7 +69,7 @@
     padding: 1rem;
 }
 
-/* 5) Hover-push buttons */
+/* 6) Hover-push + slide-in for emoji buttons */
 .selector-button {
     flex: 0 0 auto;
     font-size: 5em;
@@ -68,10 +77,42 @@
     border-radius: 8px;
     cursor: pointer;
     border: none;
+
+    /* start off-screen right */
+    transform: translateX(100%);
+    /* animate in */
+    animation: slideInButton 1s ease-out forwards;
+    /* optional stagger: */
+    /* animation-delay: calc(var(--i) * 0.05s); */
     transition: font-size 0.1s ease, padding 0.1s ease;
 }
 
 .selector-button:hover {
     font-size: 6.5em;
     padding: 0.65em 1.3em;
+}
+
+@keyframes slideInButton {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
+}
+
+/* Position the mute/unmute speaker icon in the top-right corner */
+.mute-button {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: transparent;
+    border: none;
+    font-size: 2rem;
+    cursor: pointer;
+    z-index: 10;
+    color: white;
+    outline: none;
+}
+
+.mute-button:focus,
+.mute-button:focus-visible {
+    outline: none;
+    border-color: transparent;
 }

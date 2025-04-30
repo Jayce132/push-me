@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
+import {sounds} from "../sounds.js";
 
 export function useGameSocket({
                                   url,
@@ -38,6 +39,17 @@ export function useGameSocket({
                     score: me.score ?? prev.score
                 }));
             }
+        });
+
+        sock.on('playSound', ({ type, entityId }) => {
+            if (type === 'punch')   sounds.punch.play();
+            if (type === 'death')   sounds.death.play();
+            if (type === 'wallHit') sounds.wallHit.play();
+            if (type === 'burn') sounds.burn.play();
+            if (type === 'extinguish') sounds.extinguish.play();
+            if (type === 'music') sounds.music.play();
+
+            console.log('playSound', type, entityId);
         });
 
         sock.on(switchEvent, ({ skin, score }) => {

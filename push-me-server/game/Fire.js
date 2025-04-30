@@ -1,4 +1,3 @@
-// game/Fire.js
 class Fire {
     /**
      * @param {{x:number,y:number}} pos
@@ -35,6 +34,8 @@ class Fire {
     punchedBy(attacker, vec) {
         // `attacker.isAlive === false` means “ghost”
         if (!attacker.isAlive) {
+            // tell everyone “play the punch‐hit sound for this entity”
+            this.eventEmitter.emit('playSound', {type: 'extinguish', entityId: this.id});
             this.eventEmitter.emit('extinguishFire', { x: this.x, y: this.y });
         }
     }

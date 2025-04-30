@@ -1,4 +1,3 @@
-// game/EmptyCell.js
 class EmptyCell {
     constructor(pos, physicsEngine) {
         this.x = pos.x; this.y = pos.y;

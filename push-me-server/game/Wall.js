@@ -41,6 +41,14 @@ class Wall {
     punchedBy(attacker, vec, power = 3) {
         const {physicsEngine, eventEmitter} = attacker.gameContext;
 
+
+        // emit a “wallHit” sound event to all clients
+        eventEmitter.emit('playSound', {
+            type: 'wallHit',
+            // if you want the client to know who hit it, use attacker.id
+            entityId: attacker.id
+        });
+
         // start self‐knockback animation
         attacker.isKnockedBack = true;
         eventEmitter.emit('entityUpdated', attacker.id);

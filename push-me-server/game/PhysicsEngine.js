@@ -1,5 +1,3 @@
-// game/PhysicsEngine.js
-
 const EmptyCell = require("./EmptyCell");
 const Fire = require("./Fire");
 const Wall = require("./Wall");

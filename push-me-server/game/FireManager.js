@@ -1,4 +1,3 @@
-// game/FireManager.js
 const Fire = require('./Fire');
 
 class FireManager {
@@ -64,6 +63,11 @@ class FireManager {
     }
 
     _spreadAll() {
+        // tell everyone to play the “burn” SFX for each spread
+        this.eventEmitter.emit('playSound', {
+            type: 'burn',
+        });
+
         // track occupied keys so two Fires don't double‑spawn the same cell
         const occupied = new Set(this.fires.map(f => `${f.x},${f.y}`));
         const newFires = [];

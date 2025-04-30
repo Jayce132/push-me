@@ -1,5 +1,5 @@
 import React from 'react';
-import '../screens/Sidebar.css'; // adjust path if needed
+import './Sidebar.css';
 
 export const PlayerList = ({ players, currentUser, currentSocketId }) => {
     const sorted = Object.entries(players)

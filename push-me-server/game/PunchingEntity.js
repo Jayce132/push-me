@@ -1,4 +1,3 @@
-// game/PunchingEntity.js
 const EventEmitter = require('events');
 
 class PunchingEntity {
@@ -136,6 +135,9 @@ class PunchingEntity {
     punchedBy(vec, power = 3) {
         const {physicsEngine, eventEmitter} = this.gameContext;
 
+        // tell everyone “play the punch‐hit sound for this entity”
+        eventEmitter.emit('playSound', {type: 'punch', entityId: this.id});
+
         // start knockback animation
         this.isKnockedBack = true;
         eventEmitter.emit('entityUpdated', this.id);
@@ -171,6 +173,10 @@ class PunchingEntity {
      */
     die() {
         if (!this.isAlive) return;
+
+        // tell everyone “play the death sound for this entity”
+        this.gameContext.eventEmitter.emit('playSound', {type: 'death', entityId: this.id});
+
         this.isAlive = false;
         this.gameContext.eventEmitter.emit('playerDied', this.id);
     }
