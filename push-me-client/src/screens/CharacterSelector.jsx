@@ -1,6 +1,7 @@
 import React, {useEffect, useState, useRef} from 'react';
 import './CharacterSelector.css';
 import {sounds} from '../sounds.js';
+import {LOBBY_URL} from "../config.js";
 
 export const CharacterSelector = ({onSelect}) => {
     const [skins, setSkins] = useState([]);
@@ -24,7 +25,7 @@ export const CharacterSelector = ({onSelect}) => {
 
     // 1) Load skins
     useEffect(() => {
-        fetch('http://localhost:3001/skins')
+        fetch(`${LOBBY_URL}/skins`)
             .then(res => res.json())
             .then(data => setSkins(data.freeSkins))
             .catch(console.error)

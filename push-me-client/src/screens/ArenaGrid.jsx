@@ -10,6 +10,7 @@ import { useCamera }         from '../hooks/useCamera.js';
 import Sidebar               from '../components/Sidebar.jsx';
 import {PlayerList} from "../components/PlayerList.jsx";
 import {ArenaControls} from "../components/Controls.jsx";
+import {ARENA_URL} from "../config.js";
 
 export const ArenaGrid = ({ user, setUser, setInLobby }) => {
     // 1) socket + arena state
@@ -18,7 +19,7 @@ export const ArenaGrid = ({ user, setUser, setInLobby }) => {
         gameState: { players, fires },
         gridSize,
     } = useGameSocket({
-        url: 'http://localhost:3000',
+        url: ARENA_URL,
         user,
         setUser,
         setInLobby,

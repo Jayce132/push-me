@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start:lobby": "cross-env MODE=lobby PORT=3001 node index.js",
+    "start:arena": "cross-env MODE=arena PORT=3000 node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -11,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
     "express": "^4.18.2",
     "nodemon": "^3.0.1",
     "socket.io": "^4.7.2"

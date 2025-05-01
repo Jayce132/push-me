@@ -14,11 +14,12 @@ const {
 } = require('./utils/sharedGame');
 
 class LobbyServer {
-    constructor(port = 3001, {gridSize, availableSkins, botSkin}) {
+    constructor(port = 3001, {gridSize, availableSkins, botSkin, clientOrigin}) {
         this.port = port;
         this.gridSize = gridSize;
         this.availableSkins = availableSkins;
         this.botSkin = botSkin;
+        this.clientOrigin    = clientOrigin;
 
         // all entities in the lobby: human players + bot (if any)
         this.players = {};
@@ -28,10 +29,10 @@ class LobbyServer {
         this.physicsEngine = new PhysicsEngine(this.gridSize, this.players);
 
         this.app = express();
-        this.app.use(cors());
+        this.app.use(cors({ origin: this.clientOrigin }));
         this.server = http.createServer(this.app);
         this.io = new Server(this.server, {
-            cors: {origin: "http://localhost:5173", methods: ["GET", "POST"]}
+            cors: {origin: this.clientOrigin, methods: ["GET", "POST"]}
         });
 
         // HTTP endpoint to list free skins
@@ -105,8 +106,6 @@ class LobbyServer {
                         score: p.score
                     });
                 }
-
-                console.log(this.players)
             });
 
             // on human disconnect: remove player, maybe remove bot if no humans left

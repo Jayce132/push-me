@@ -10,6 +10,7 @@ import { useCamera }         from '../hooks/useCamera.js';
 import Sidebar           from '../components/Sidebar.jsx';
 import { LobbyControls } from '../components/Controls.jsx';
 import { PlayerList }    from '../components/PlayerList.jsx';
+import {LOBBY_URL} from "../config.js";
 
 export const LobbyGrid = ({ user, setUser, setInLobby }) => {
     // 1) socket + lobby state
@@ -18,7 +19,7 @@ export const LobbyGrid = ({ user, setUser, setInLobby }) => {
         gameState: lobbyState,
         gridSize,
     } = useGameSocket({
-        url: 'http://localhost:3001',
+        url: LOBBY_URL,
         user,
         setUser,
         setInLobby,

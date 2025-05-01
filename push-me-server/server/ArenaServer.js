@@ -13,20 +13,22 @@ const {
 } = require('./utils/sharedGame');
 
 class ArenaServer {
-    constructor(port = 3000, {gridSize, availableSkins}) {
+    constructor(port = 3000, {gridSize, availableSkins, clientOrigin}) {
         this.port = port;
         this.gridSize = gridSize;
         this.availableSkins = availableSkins;
+        this.clientOrigin   = clientOrigin;
+
         this.players = {};
 
         this.eventEmitter = new EventEmitter();
 
         // express + socket.io
         this.app = express();
-        this.app.use(cors());
+        this.app.use(cors({ origin: this.clientOrigin }));
         this.server = http.createServer(this.app);
         this.io = new Server(this.server, {
-            cors: {origin: "http://localhost:5173", methods: ["GET", "POST"]}
+            cors: {origin: this.clientOrigin, methods: ["GET", "POST"]}
         });
 
         // fire manager

@@ -1,18 +1,30 @@
+require('dotenv').config();
+
+
 const ArenaServer = require('./server/ArenaServer');
 const LobbyServer = require('./server/LobbyServer');
 
-// Grid configuration
-const gridSize = 25;
-
-// Define available skins for human players and the bot skin.
+// shared config
+const gridSize       = 25;
 const availableSkins = ['😂', '🤣', '😍', '😭', '😎', '😒', '😝', '😳', '🤪', '🤬', '😏', '😃', '🥺', '😨', '🥲', '🤯', '🤠', '😤', '🤥', '🤨', '🤓', '🥶', '😶‍🌫️', '🫠', '🫥', '😵‍💫', '😴', '🤡', '🤢'];
-// const availableSkins = [];
+const botSkin        = '🤖';
 
-const botSkin = '🤖';
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+const MODE = process.env.MODE;
+const PORT = parseInt(process.env.PORT, 10)
+    || (MODE === 'lobby' ? 3001 : 3000);
 
-
-const arena = new ArenaServer(3000, { gridSize, availableSkins, botSkin });
-const lobby = new LobbyServer(3001, { gridSize, availableSkins, botSkin });
-
-arena.start();
-lobby.start();
+if (MODE === 'lobby') {
+    new LobbyServer(PORT, { gridSize, availableSkins, botSkin, clientOrigin: CLIENT_ORIGIN })
+        .start();
+    console.log(`→ LobbyServer started on port ${PORT}`);
+}
+else if (MODE === 'arena') {
+    new ArenaServer(PORT, { gridSize, availableSkins, clientOrigin: CLIENT_ORIGIN })
+        .start();
+    console.log(`→ ArenaServer started on port ${PORT}`);
+}
+else {
+    console.error('❌  .env must set MODE=lobby or MODE=arena');
+    process.exit(1);
+}
