@@ -1,5 +1,8 @@
 # push-me
 
+![image](https://github.com/user-attachments/assets/b9e64f0e-f22f-451b-a35e-583091d6d2f2)
+
+
 **push-me** is a realtime, session‑based multiplayer arena game where each player selects a unique emoji skin, practices against a lobby bot, then battles opponents in a fiery grid arena. Survive and out‑push your rivals to earn points and win rounds.
 
 ---
@@ -113,6 +116,10 @@ push-me/
 
 ### LobbyGrid
 
+
+https://github.com/user-attachments/assets/45e17db7-be11-44cd-be0c-706d89bcd2fe
+
+
 * Connects to the lobby server via WebSocket and receives real-time updates on players and the bot.
 * Renders:
   * A grid of `<Cell>`s inside a bordered wall.
@@ -125,6 +132,8 @@ push-me/
 
 ### ArenaGrid
 
+https://github.com/user-attachments/assets/44d75a07-32f0-4aa7-8fe9-b20ab45e4392
+
 * Connects to the arena server via WebSocket and listens for arena state and fire updates.
 * Renders:
   * Grid of `<Cell>`s, surrounded by `<Wall>`s.
@@ -134,6 +143,8 @@ push-me/
 * Includes `<AimIndicator>` that visually reflects punch direction and strength (based on steps walked).
 * Uses `useCamera` to scroll the viewport horizontally and vertically depending on the player's position and the grid size.
 * Left sidebar shows arena controls (e.g. leave match); right sidebar shows player list.
+
+https://github.com/user-attachments/assets/57b6ff26-7fcd-4d61-9600-da8882b9df58
 
 ## Game Flow & Rules
 
