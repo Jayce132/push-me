@@ -1,4 +1,3 @@
-// hooks/usePlayerControls.js
 import { useEffect, useRef, useState } from 'react';
 
 /**
@@ -13,21 +12,22 @@ export function usePlayerControls({
                                   }) {
     const keysPressed = useRef({});
     const [localLastDirection, setLocalLastDirection] = useState({ dx: 0, dy: -1 });
-    const [localPunching,     setLocalPunching]     = useState(false);
+    const [localPunching, setLocalPunching] = useState(false);
     const [localPunchDirection, setLocalPunchDirection] = useState(null);
 
-    // pick local or server-supplied
+    // pick local or server‐supplied
     const aimDirection = isCurrentPlayer
         ? localLastDirection
         : serverLastDirection;
 
     const indicatorDistance = cellSize * 0.8;
-    const shouldShowPunch   = localPunching;
+    const shouldShowPunch = localPunching;
 
     useEffect(() => {
         if (!isCurrentPlayer) return;
 
         const handleKeyDown = e => {
+            // space = punch
             if (e.key === ' ') {
                 e.preventDefault();
                 // capture the direction at moment of punch
@@ -40,19 +40,44 @@ export function usePlayerControls({
                 }, 100);
                 return;
             }
-            keysPressed.current[e.key] = true;
+
+            // movement keys: WASD (any case) + arrows
+            const movementKeys = [
+                'w','W','a','A','s','S','d','D',
+                'ArrowUp','ArrowDown','ArrowLeft','ArrowRight'
+            ];
+            if (movementKeys.includes(e.key)) {
+                e.preventDefault();
+                keysPressed.current[e.key] = true;
+            }
         };
-        const handleKeyUp = e => delete keysPressed.current[e.key];
+
+        const handleKeyUp = e => {
+            delete keysPressed.current[e.key];
+        };
 
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
 
         const iv = setInterval(() => {
             let dx = 0, dy = 0;
-            if (keysPressed.current['w']) dx -= 1;
-            if (keysPressed.current['s']) dx += 1;
-            if (keysPressed.current['a']) dy -= 1;
-            if (keysPressed.current['d']) dy += 1;
+            // up: W or w or ArrowUp
+            if (keysPressed.current['w'] || keysPressed.current['W'] || keysPressed.current['ArrowUp']) {
+                dx -= 1;
+            }
+            // down: S or s or ArrowDown
+            if (keysPressed.current['s'] || keysPressed.current['S'] || keysPressed.current['ArrowDown']) {
+                dx += 1;
+            }
+            // left: A or a or ArrowLeft
+            if (keysPressed.current['a'] || keysPressed.current['A'] || keysPressed.current['ArrowLeft']) {
+                dy -= 1;
+            }
+            // right: D or d or ArrowRight
+            if (keysPressed.current['d'] || keysPressed.current['D'] || keysPressed.current['ArrowRight']) {
+                dy += 1;
+            }
+
             if (dx !== 0 || dy !== 0) {
                 setLocalLastDirection({ dx, dy });
                 onMove({ dx, dy });
@@ -61,7 +86,7 @@ export function usePlayerControls({
 
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup',   handleKeyUp);
+            window.removeEventListener('keyup', handleKeyUp);
             clearInterval(iv);
         };
     }, [isCurrentPlayer, onMove, onPunch, localLastDirection]);
