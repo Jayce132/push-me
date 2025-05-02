@@ -1,9 +1,9 @@
 import React, { useRef } from 'react';
-import Cell            from '../game/Cell.jsx';
-import { Wall }        from '../game/Wall.jsx';
-import { Player }      from '../game/Player.jsx';
-import { Ghost }       from '../game/Ghost.jsx';
-import { Fire }        from '../game/Fire.jsx';
+import Cell            from '../components/game/Cell.jsx';
+import { Wall }        from '../components/game/Wall.jsx';
+import { Player }      from '../components/game/Player.jsx';
+import { Ghost }       from '../components/game/Ghost.jsx';
+import { Fire }        from '../components/game/Fire.jsx';
 import { useGameSocket }    from '../hooks/useGameSocket.js';
 import { useGridDimensions } from '../hooks/useGridDimensions.js';
 import { useCamera }         from '../hooks/useCamera.js';

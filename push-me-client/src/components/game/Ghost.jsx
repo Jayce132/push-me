@@ -1,6 +1,6 @@
 // components/Ghost.jsx
 import React from 'react';
-import { usePlayerControls } from '../hooks/usePlayerControls.js';
+import { usePlayerControls } from '../../hooks/usePlayerControls.js';
 import { AimIndicator }      from './AimIndicator.jsx';
 import { PunchIndicator }    from './PunchIndicator.jsx';
 
